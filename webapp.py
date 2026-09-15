@@ -50,6 +50,26 @@ _buf_handler = _BufferHandler()
 _buf_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
 logging.getLogger().addHandler(_buf_handler)
 
+# #80-DP: os logs stdlib do app TÊM de chegar ao stdout do container. Só o
+# _BufferHandler no root DESLIGA o `lastResort` do Python (que imprimia
+# WARNING+ no stderr) e o uvicorn configura apenas os loggers dele — resultado:
+# `docker logs` mostrava SÓ o access log, e falhas do aprendizado (Plano 3),
+# da extração e da automação sumiam (o buffer de 300 linhas rotaciona em
+# minutos). Handler idempotente (o módulo pode ser importado mais de uma vez).
+def _instalar_log_stdout() -> None:
+    import sys as _sys
+    _root = logging.getLogger()
+    if not any(isinstance(h, logging.StreamHandler) for h in _root.handlers):
+        _h = logging.StreamHandler(_sys.stdout)
+        _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        _root.addHandler(_h)
+    _nivel = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
+    _root.setLevel(_nivel)
+    for _noisy in ("httpx", "httpcore", "urllib3", "asyncio", "watchfiles", "PIL"):
+        logging.getLogger(_noisy).setLevel(logging.WARNING)
+
+_instalar_log_stdout()
+
 import time as _time
 from config import OUTPUT_DIR, CLOUD_MODE, PJECALC_DIR, PJECALC_LOCAL_URL, PJECALC_TOMCAT_TIMEOUT
 
@@ -5037,6 +5057,35 @@ async def enviar_pjc_definitivo(
         "resumo": rel["resumo"],
         "linhas": resumo_legivel(rel),
         "sentenca_definitiva": rel.get("sentenca_definitiva", {}),
+        "relatorio": f"/api/pjc-definitivo/{sessao_id}/relatorio",
+    }
+
+
+@app.post("/api/pjc-definitivo/{sessao_id}/reanalisar")
+async def reanalisar_pjc_definitivo(sessao_id: str, background_tasks: BackgroundTasks):
+    """#80-DP — reexecuta a análise (FATIA 2) do PJC definitivo já enviado:
+    re-diffa a partir dos arquivos persistidos (para o relatório ganhar o
+    detalhe das entidades adicionadas) e dispara o LLM em background. O
+    ciclo de confiança NÃO roda de novo (já bonificou na 1ª execução)."""
+    from learning.pjc_aprendizado import analisar_diff_em_background
+    from learning.pjc_diff import carregar_relatorio, reprocessar_relatorio, resumo_legivel
+    rel = carregar_relatorio(sessao_id, _APRENDIZADO_PJC_DIR)
+    if rel is None:
+        raise HTTPException(status_code=404, detail="Nenhum PJC definitivo enviado para esta sessão")
+    reprocessado = False
+    try:
+        novo = reprocessar_relatorio(sessao_id, _APRENDIZADO_PJC_DIR)
+        if novo is not None:
+            rel, reprocessado = novo, True
+    except Exception as e:
+        logger.warning("pjc-definitivo/reanalisar(%s): re-diff falhou, usando relatório existente: %s",
+                       sessao_id, e)
+    background_tasks.add_task(analisar_diff_em_background, sessao_id, True)
+    return {
+        "ok": True,
+        "reprocessado": reprocessado,
+        "resumo": rel.get("resumo"),
+        "linhas": resumo_legivel(rel),
         "relatorio": f"/api/pjc-definitivo/{sessao_id}/relatorio",
     }
 

@@ -43,6 +43,12 @@ _CONF_TETO = 0.95
 
 LIMIAR_INJECAO = 0.6
 
+# #80-DP: teto de saída da análise. O default do orquestrador (4096) TRUNCAVA
+# a resposta em diffs grandes (0001156-86: 68 campos + 12 entidades → JSON
+# cortado → parse falhava → 0 regras, resumo vazio, sem erro registrado).
+MAX_TOKENS_ANALISE = 16000
+_MAX_RESPOSTA_BRUTA = 3000
+
 
 def _norm(s: str) -> str:
     nfkd = unicodedata.normalize("NFKD", str(s or ""))
@@ -167,15 +173,58 @@ def _diff_em_linhas(rel: dict) -> str:
     try:
         from learning.pjc_diff import resumo_legivel
         return "\n".join(resumo_legivel(rel))
-    except Exception:
+    except Exception as e:
+        logger.warning("pjc_aprendizado: resumo_legivel falhou (%s) — enviando JSON bruto", e)
         return json.dumps(rel, ensure_ascii=False)[:4000]
 
 
-def analisar_diff(sessao_id: str, db, orchestrator=None) -> dict:
+_REEMISSAO = (
+    "\n\n⚠️ A resposta anterior NÃO era um objeto JSON válido com a chave "
+    "\"regras\" (veio truncada ou com texto fora do JSON). Reemita SOMENTE o "
+    "objeto JSON, compacto (sem espaços supérfluos), sem markdown e sem "
+    "comentários — uma regra por correção raiz."
+)
+
+
+def _resposta_valida(result) -> bool:
+    return isinstance(result, dict) and isinstance(result.get("regras"), list)
+
+
+def _chamar_llm(orchestrator, task_type, prompt: str) -> tuple[Any, str | None, str | None]:
+    """Chama o LLM com teto de saída ampliado e UMA reemissão estrita se a
+    resposta não for JSON com "regras". Retorna (result, erro, resposta_bruta):
+    `erro`/`resposta_bruta` preenchidos APENAS quando a resposta final é
+    inválida — vão para o relatório, para o diagnóstico nunca ser inferencial."""
+    kw = dict(system_override=_SYSTEM_PROMPT, inject_knowledge=False,
+              inject_learned_rules=False, timeout=180, max_tokens=MAX_TOKENS_ANALISE)
+    result = orchestrator.complete(task_type, prompt, **kw)
+    if _resposta_valida(result):
+        return result, None, None
+    logger.warning("pjc_aprendizado: resposta do LLM não é JSON com 'regras' "
+                   "(tipo=%s, %d chars) — reemissão estrita",
+                   type(result).__name__, len(str(result)))
+    result2 = orchestrator.complete(task_type, prompt + _REEMISSAO, **kw)
+    if _resposta_valida(result2):
+        return result2, None, None
+    bruta = str(result2 if result2 not in (None, "", {}) else result)
+    erro = (f"resposta do LLM não é JSON com a chave 'regras' mesmo após reemissão "
+            f"(tipo={type(result2).__name__}, {len(bruta)} chars"
+            + ("; provável truncamento — JSON sem fechamento" if bruta.strip()
+               and not bruta.strip().endswith("}") else "") + ")")
+    return result2, erro, bruta[:_MAX_RESPOSTA_BRUTA]
+
+
+def analisar_diff(sessao_id: str, db, orchestrator=None,
+                  reexecucao: bool = False) -> dict:
     """FATIA 2 — analisa o diff persistido e gera/atualiza RegrasAprendidas.
 
     Retorna {"regras_novas": n, "regras_reconfirmadas": n, "acertos": n,
-    "resumo": str}. Best-effort: nunca levanta."""
+    "resumo": str} (+ "erro"/"resposta_bruta" quando a resposta do LLM não
+    pôde ser aproveitada — #80-DP). Best-effort: nunca levanta.
+
+    `reexecucao=True` (reanálise do MESMO diff): o ciclo de confiança NÃO roda
+    de novo — já bonificou as regras ativas na 1ª execução e não é idempotente
+    (+0.05 a cada passagem)."""
     out = {"regras_novas": 0, "regras_reconfirmadas": 0, "acertos": 0,
            "conflitos_abertos": 0, "resumo": ""}
     try:
@@ -187,7 +236,13 @@ def analisar_diff(sessao_id: str, db, orchestrator=None) -> dict:
 
         # FATIA 3 — ciclo de confiança roda SEMPRE (inclusive diff vazio:
         # PJC idêntico = a automação acertou tudo → acertos p/ regras ativas)
-        out["acertos"] = ciclo_confianca_pjc(db, sessao_id, rel)
+        ja_analisado = bool((rel.get("aprendizado") or {}).get("analisado_em"))
+        if reexecucao and ja_analisado:
+            out["acertos"] = int((rel.get("aprendizado") or {}).get("acertos") or 0)
+            logger.info("pjc_aprendizado(%s): reexecução — ciclo de confiança "
+                        "já rodou (%d acerto(s)); pulando", sessao_id, out["acertos"])
+        else:
+            out["acertos"] = ciclo_confianca_pjc(db, sessao_id, rel)
 
         if rel.get("resumo", {}).get("identicos"):
             out["resumo"] = "PJC definitivo idêntico ao gerado — nada a aprender; regras ativas reconfirmadas."
@@ -216,16 +271,23 @@ def analisar_diff(sessao_id: str, db, orchestrator=None) -> dict:
             + "\n\n## Tarefa\nGere as regras conforme o formato. "
               "Responda APENAS com JSON válido."
         )
-        result = orchestrator.complete(
-            TaskType.LEARNING_ANALYSIS,
-            prompt,
-            system_override=_SYSTEM_PROMPT,
-            inject_knowledge=False,
-            inject_learned_rules=False,
-            timeout=90,
-        )
+        try:
+            result, erro, bruta = _chamar_llm(orchestrator, TaskType.LEARNING_ANALYSIS, prompt)
+        except Exception as e_llm:
+            # #80-DP: a falha da chamada TEM de ficar no relatório — antes o
+            # except externo engolia e o relatório ficava sem `aprendizado`.
+            out["erro"] = f"chamada LLM falhou: {type(e_llm).__name__}: {e_llm}"
+            logger.warning("pjc_aprendizado.analisar_diff(%s): %s", sessao_id, out["erro"],
+                           exc_info=True)
+            _persistir_aprendizado_no_relatorio(sessao_id, out)
+            return out
+        if erro:
+            out["erro"] = erro
+            out["resposta_bruta"] = bruta
+            logger.warning("pjc_aprendizado.analisar_diff(%s): %s | início da resposta: %.200s",
+                           sessao_id, erro, bruta)
         regras = result.get("regras", []) if isinstance(result, dict) else []
-        out["resumo"] = (result.get("resumo", "") if isinstance(result, dict) else "")
+        out["resumo"] = (str(result.get("resumo") or "") if isinstance(result, dict) else "")
 
         novas, reconf, conflitos = _persistir_regras(db, sessao_id, regras,
                                                      contexto=contexto)
@@ -243,7 +305,9 @@ def analisar_diff(sessao_id: str, db, orchestrator=None) -> dict:
             sessao_id, novas, reconf, out["acertos"], conflitos,
         )
     except Exception as e:
-        logger.warning("pjc_aprendizado.analisar_diff(%s): %s", sessao_id, e)
+        out["erro"] = f"{type(e).__name__}: {e}"
+        logger.warning("pjc_aprendizado.analisar_diff(%s): %s", sessao_id, e, exc_info=True)
+        _persistir_aprendizado_no_relatorio(sessao_id, out)
     return out
 
 
@@ -372,17 +436,17 @@ def _persistir_aprendizado_no_relatorio(sessao_id: str, aprendizado: dict) -> No
         logger.warning("persistir aprendizado no relatório: %s", e)
 
 
-def analisar_diff_em_background(sessao_id: str) -> None:
+def analisar_diff_em_background(sessao_id: str, reexecucao: bool = False) -> None:
     """Entry-point p/ BackgroundTasks do FastAPI — sessão de DB própria."""
     try:
         from infrastructure.database import SessionLocal
         db = SessionLocal()
         try:
-            analisar_diff(sessao_id, db)
+            analisar_diff(sessao_id, db, reexecucao=reexecucao)
         finally:
             db.close()
     except Exception as e:
-        logger.warning("analisar_diff_em_background(%s): %s", sessao_id, e)
+        logger.warning("analisar_diff_em_background(%s): %s", sessao_id, e, exc_info=True)
 
 
 # ── FATIA 3 — ciclo de confiança ─────────────────────────────────────────────

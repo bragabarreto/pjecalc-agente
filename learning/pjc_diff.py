@@ -42,6 +42,11 @@ _TAGS_VERBA = {"Calculada", "Informada", "ImportadaDoCartaoDePonto"}
 _TAG_REFLEXO = "Reflexo"
 _TAG_HISTORICO = "HistoricoSalarial"
 _TAGS_ENTIDADE = _TAGS_VERBA | {_TAG_REFLEXO, _TAG_HISTORICO}
+# #80-DP: tags cuja REFERÊNCIA (`<Tag><internalRef>ID</internalRef></Tag>`) é
+# resolvida para o NOME da definição — inclui o cartão de ponto (coluna
+# "Hs EXT"/"Hs Trabalhadas"), que não é entidade diffada mas é o vínculo que
+# diz de ONDE a verba importa quantidade/divisor.
+_TAGS_REFERENCIAVEIS = _TAGS_ENTIDADE | {"CartaoDePonto"}
 
 # Tags de RUÍDO — identidade interna, auditoria, hashes e valores derivados.
 # ⚠ NÃO incluir 'ativo' (reflexo ativado/desativado é o parâmetro mais
@@ -69,6 +74,12 @@ _TAGS_RUIDO = {
     # #80-BI: backref da entidade ao cálculo e grade DIÁRIA da jornada
     # (centenas de linhas recomputadas — análogo a <ocorrencias>)
     "calculo", "ocorrenciasJornadaApuracaoCartao",
+    # #80-DP: versão do PJE-Calc que exportou (2.14 → 2.16 não é correção) e
+    # faixas/descontos de IRPF dos honorários — DERIVADOS da tabela do IR na
+    # liquidação, não parâmetro do usuário.
+    "versaoDoSistema",
+    "valorDescontoSimplificadoIrpf", "valorParcelaFaixaReducaoIrpf",
+    "valorTetoFaixaIsencaoIrpf", "valorTetoFaixaReducaoIrpf",
 }
 
 # Sufixos de caminho DERIVADOS (recomputados a partir de percentual × base)
@@ -134,17 +145,68 @@ _CAMPOS_DISCRIMINADORES = ("descricao", "nome", "nomeCredor",
                            "sequencial", "data")
 
 
-def _disc_item(ch: ET.Element, idx: int) -> str:
-    """#80-BJ: chave natural de um item de coleção (descricao/nome/credor/…),
-    fallback = posição entre irmãos da mesma tag."""
+# #80-DP: wrappers de VÍNCULO cujo filho referencia uma entidade nomeada —
+# em ordem de preferência p/ discriminar o item (o histórico/cartão vinculado
+# identifica o item melhor que a verba dona, que é igual em todos os itens).
+_WRAPPERS_VINCULO = ("historicoSalarial", "cartaoDePonto", "verbaDeCalculo")
+
+
+def _nome_referenciado(el: ET.Element, refs: dict[str, str] | None) -> str | None:
+    """Nome da entidade que `el` (tag referenciável) define ou referencia:
+    definição inline → seu <nome>; `<internalRef>ID</internalRef>` → nome da
+    definição de mesmo id (mapa `refs`). None se não resolver."""
+    if el.tag not in _TAGS_REFERENCIAVEIS:
+        return None
+    nome = (el.findtext("nome") or "").strip()
+    if nome:
+        return _norm_nome(nome)
+    iref = (el.findtext("internalRef") or "").strip()
+    if refs and iref in refs:
+        return refs[iref]
+    return None
+
+
+def _disc_item(ch: ET.Element, idx: int, refs: dict[str, str] | None = None) -> str:
+    """#80-BJ: chave natural de um item de coleção (descricao/nome/credor/…);
+    #80-DP: item de VÍNCULO (HistoricoSalarialDaVerba, CartaoDePontoDaVerba,
+    ItemBaseVerba) é keyed pelo nome da entidade vinculada — assim
+    "13º SALÁRIO ganhou COMISSOES na base" sai como
+    `HistoricoSalarialDaVerba[COMISSOES].tipoVinculoHistorico: (vazio) → BASE`
+    em vez de um índice opaco; fallback = posição entre irmãos da mesma tag."""
     for c in _CAMPOS_DISCRIMINADORES:
         v = (ch.findtext(c) or "").strip()
         if v and v.lower() != "null":
             return _norm_nome(v)[:48]
+    for w in _WRAPPERS_VINCULO:
+        wrap = ch.find(w)
+        if wrap is None:
+            continue
+        for e in wrap:
+            nome = _nome_referenciado(e, refs)
+            if nome:
+                return nome[:48]
     return str(idx)
 
 
-def _flatten(el: ET.Element, prefixo: str = "") -> dict[str, str]:
+def _mapa_refs(root: ET.Element) -> dict[str, str]:
+    """#80-DP: id → nome de TODA definição referenciável (verba/reflexo/
+    histórico/cartão). O XStream serializa a 1ª ocorrência por extenso e as
+    demais como `<internalRef>ID</internalRef>` — sem o mapa, o vínculo da
+    verba com seu histórico-base ("COMISSOES") e com a coluna do cartão
+    ("Hs Trabalhadas") era DESCARTADO do diff, e a verba adicionada saía sem
+    a informação mais importante para o aprendizado."""
+    refs: dict[str, str] = {}
+    for el in _walk(root):
+        if el.tag in _TAGS_REFERENCIAVEIS:
+            _id = (el.findtext("id") or "").strip()
+            nome = (el.findtext("nome") or "").strip()
+            if _id and nome and _id not in refs:
+                refs[_id] = _norm_nome(nome)
+    return refs
+
+
+def _flatten(el: ET.Element, prefixo: str = "",
+             refs: dict[str, str] | None = None) -> dict[str, str]:
     """Aplaina um subtree em {caminho: valor}, pulando ruído, substituindo
     definições ANINHADAS de entidade por 'ref:<nome>' (não duplica árvores).
 
@@ -165,7 +227,7 @@ def _flatten(el: ET.Element, prefixo: str = "") -> dict[str, str]:
         idx_por_tag[ch.tag] = idx + 1
         tag_path = ch.tag
         if eh_colecao and len(list(ch)) > 0:
-            tag_path = f"{ch.tag}[{_disc_item(ch, idx)}]"
+            tag_path = f"{ch.tag}[{_disc_item(ch, idx, refs)}]"
         caminho = f"{prefixo}.{tag_path}" if prefixo else tag_path
         # #80-BJ: comparar sufixos derivados IGNORANDO os discriminadores
         # "[...]" — senão `Set.Honorario[X].valor` escapa do filtro e o valor
@@ -176,13 +238,22 @@ def _flatten(el: ET.Element, prefixo: str = "") -> dict[str, str]:
         if _eh_definicao_entidade(ch):
             out[caminho] = f"ref:{_norm_nome(ch.findtext('nome') or '')}"
             continue
+        # #80-DP: referência (`<internalRef>`) a entidade definida noutro
+        # ponto do XML → mesmo "ref:<nome>" da definição inline. Sem isto o
+        # mesmo vínculo saía "ref:X" num PJC e (vazio) no outro (falso diff)
+        # e o histórico-base da verba adicionada não aparecia.
+        if ch.tag in _TAGS_REFERENCIAVEIS and not ch.findtext("nome"):
+            nome_ref = _nome_referenciado(ch, refs)
+            if nome_ref:
+                out[caminho] = f"ref:{nome_ref}"
+                continue
         filhos = list(ch)
         if not filhos:
             v = _norm_valor(ch.text or "")
             if v != "":
                 out[caminho] = v
         else:
-            out.update(_flatten(ch, caminho))
+            out.update(_flatten(ch, caminho, refs))
     return out
 
 
@@ -218,6 +289,9 @@ def parse_pjc_params(pjc_bytes: bytes) -> dict[str, Any]:
             if v != "":
                 parametros[ch.tag] = v
 
+    # #80-DP: mapa id → nome p/ resolver <internalRef> em vínculos
+    refs = _mapa_refs(root)
+
     # 2. Entidades nomeadas — coletar DEFINIÇÕES onde quer que estejam;
     #    dedup por (categoria, nome) preferindo a definição mais completa.
     verbas: dict[str, dict] = {}
@@ -227,9 +301,15 @@ def parse_pjc_params(pjc_bytes: bytes) -> dict[str, Any]:
         if not _eh_definicao_entidade(el):
             continue
         nome = _norm_nome(el.findtext("nome") or "")
-        params = _flatten(el)
+        params = _flatten(el, refs=refs)
         params.pop("nome", None)
         params.pop("descricao", None)  # descricao ~ nome truncado (#80-O)
+        # #80-DP: backrefs da entidade a SI MESMA (item de vínculo → verba
+        # dona, fórmula → verba) são identidade, não parâmetro — e entre uma
+        # verba e seu desdobramento sempre "diferem" (ruído puro).
+        auto = f"ref:{nome}"
+        for k in [k for k, v in params.items() if v == auto]:
+            params.pop(k)
         if el.tag in _TAGS_VERBA:
             alvo, extra = verbas, {"tipo": el.tag}
         elif el.tag == _TAG_REFLEXO:
@@ -245,7 +325,7 @@ def parse_pjc_params(pjc_bytes: bytes) -> dict[str, Any]:
     for sec in _SECOES_GLOBAIS:
         el = root.find(sec)
         if el is not None:
-            flat = _flatten(el)
+            flat = _flatten(el, refs=refs)
             if flat:
                 secoes[sec] = flat
 
@@ -258,18 +338,97 @@ def parse_pjc_params(pjc_bytes: bytes) -> dict[str, Any]:
     }
 
 
+def _sem_valor(v) -> bool:
+    return v is None or str(v).strip().lower() == "null"
+
+
 def _diff_params(de: dict[str, str], para: dict[str, str]) -> list[dict]:
-    """Diff campo a campo entre dois dicts aplainados."""
+    """Diff campo a campo entre dois dicts aplainados.
+
+    #80-DP: tag AUSENTE e tag com texto literal "null" são o MESMO estado
+    (sem valor) — `comentarios: (vazio) → null` em 20 reflexos era ruído que
+    diluía o sinal do prompt. O literal "null" é preservado nos valores
+    (chaves de regra já persistidas dependem dele)."""
     campos = []
     for k in sorted(set(de) | set(para)):
         v1, v2 = de.get(k), para.get(k)
-        if v1 != v2:
+        if v1 != v2 and not (_sem_valor(v1) and _sem_valor(v2)):
             campos.append({"campo": k, "de": v1, "para": v2})
     return campos
 
 
+# #80-DP: parâmetros SEM sinal p/ o aprendizado (vazios/nulos são omitidos
+# na apresentação; estes são boilerplate idêntico em toda verba).
+_PARAMS_BOILERPLATE = {
+    "comentarios", "salarioCategoriaValorDevido", "salarioCategoriaValorPago",
+    "zeraValorNegativo", "jurosDoAjuizamento",
+}
+_MIN_PREFIXO_ORIGEM = 6
+
+
+def _params_relevantes(params: dict[str, str]) -> dict[str, str]:
+    """Parâmetros de uma entidade que interessam ao aprendizado — o MESMO
+    conjunto que o differ compara (ocorrências/derivados já excluídos no
+    parse), menos nulos/vazios e boilerplate."""
+    out: dict[str, str] = {}
+    for k, v in params.items():
+        if v is None or str(v).strip().lower() in ("", "null"):
+            continue
+        if k in _PARAMS_BOILERPLATE:
+            continue
+        out[k] = v
+    return out
+
+
+def _verba_origem(nome: str, ger: dict[str, dict]) -> str | None:
+    """#80-DP: entidade do PJC GERADO da qual a ADICIONADA é desdobramento —
+    o nome mais longo que é PREFIXO próprio do nome novo, com fronteira de
+    palavra (`HORAS EXTRAS 50%` ⊂ `HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL`).
+    Sem candidato → None."""
+    alvo = _norm_nome(nome)
+    melhor = None
+    for cand in ger:
+        c = _norm_nome(cand)
+        if len(c) < _MIN_PREFIXO_ORIGEM or len(c) >= len(alvo):
+            continue
+        if not alvo.startswith(c):
+            continue
+        if alvo[len(c)].isalnum():  # "HE 5" ⊄ "HE 50%"
+            continue
+        if melhor is None or len(c) > len(_norm_nome(melhor)):
+            melhor = cand
+    return melhor
+
+
+def _detalhe_entidade(nome: str, ent: dict, contraparte: dict[str, dict],
+                      removida: bool = False) -> dict:
+    """Detalhe de entidade ADICIONADA (contraparte = gerado) ou REMOVIDA
+    (contraparte = definitivo): parâmetros relevantes + desdobramento."""
+    det: dict[str, Any] = {
+        "nome": nome,
+        "tipo": ent.get("tipo"),
+        "params": _params_relevantes(ent.get("params", {})),
+    }
+    if removida:
+        return det
+    origem = _verba_origem(nome, contraparte)
+    if origem:
+        p_orig = _params_relevantes(contraparte[origem].get("params", {}))
+        difs = _diff_params(p_orig, det["params"])
+        det["desdobramento_de"] = origem
+        det["diferencas_vs_origem"] = difs
+        det["params_iguais_a_origem"] = len(set(p_orig) & set(det["params"])) - len(
+            [d for d in difs if d["de"] is not None and d["para"] is not None])
+    return det
+
+
 def _diff_entidades(ger: dict[str, dict], defn: dict[str, dict]) -> dict:
-    """Diff de um grupo de entidades nomeadas (verbas/reflexos/históricos)."""
+    """Diff de um grupo de entidades nomeadas (verbas/reflexos/históricos).
+
+    #80-DP: entidades ADICIONADAS/REMOVIDAS saem com DETALHE (parâmetros
+    relevantes + desdobramento). Só o nome não ensina nada — o aprendizado
+    "base mista → duas verbas de HE (Súmula 340)" precisa ver base
+    histórico, divisor IMPORTADA_DO_CARTAO, multiplicador 0,5 e reflexos."""
     adicionadas = sorted(set(defn) - set(ger))
     removidas = sorted(set(ger) - set(defn))
     alteradas = []
@@ -280,7 +439,14 @@ def _diff_entidades(ger: dict[str, dict], defn: dict[str, dict]) -> dict:
             campos.insert(0, {"campo": "tipo_lancamento", "de": t1, "para": t2})
         if campos:
             alteradas.append({"nome": nome, "campos": campos})
-    return {"adicionadas": adicionadas, "removidas": removidas, "alteradas": alteradas}
+    return {
+        "adicionadas": adicionadas,
+        "removidas": removidas,
+        "alteradas": alteradas,
+        "adicionadas_detalhe": [_detalhe_entidade(n, defn[n], ger) for n in adicionadas],
+        "removidas_detalhe": [_detalhe_entidade(n, ger[n], defn, removida=True)
+                              for n in removidas],
+    }
 
 
 def diff_pjc(pjc_gerado: bytes, pjc_definitivo: bytes) -> dict[str, Any]:
@@ -321,30 +487,97 @@ def diff_pjc(pjc_gerado: bytes, pjc_definitivo: bytes) -> dict[str, Any]:
     return rel
 
 
+_RE_EPOCH_MS = re.compile(r"^-?\d{11,14}$")
+_RE_CAMPO_DATA = re.compile(r"(periodo|data|competencia|vencimento)", re.I)
+
+
+def _fmt_valor(campo: str, valor: Any) -> str:
+    """Valor legível p/ o LLM: epoch-ms de campos de data → DD/MM/AAAA (BRT);
+    None → marcador. `1775012400000` não ensina nada; `01/04/2026` ensina."""
+    if valor is None:
+        return "(vazio)"
+    v = str(valor)
+    if _RE_EPOCH_MS.match(v) and _RE_CAMPO_DATA.search(campo or ""):
+        try:
+            from datetime import timedelta, timezone
+            dt = datetime.fromtimestamp(int(v) / 1000, tz=timezone(timedelta(hours=-3)))
+            return dt.strftime("%d/%m/%Y")
+        except (ValueError, OverflowError, OSError):
+            return v
+    return v
+
+
+_PARAMS_POR_LINHA = 5
+
+
+def _linhas_params(params: dict[str, str], recuo: str = "   · ") -> list[str]:
+    itens = [f"{k}={_fmt_valor(k, v)}" for k, v in params.items()]
+    return [recuo + "; ".join(itens[i:i + _PARAMS_POR_LINHA])
+            for i in range(0, len(itens), _PARAMS_POR_LINHA)]
+
+
+def _linhas_entidade_adicionada(rotulo: str, det: dict, removidas: list[str]) -> list[str]:
+    """#80-DP: verba/reflexo/histórico ADICIONADO sai com seus parâmetros —
+    como desdobramento da entidade de origem (diferenças lado a lado) quando
+    há prefixo em comum com o gerado, senão com a lista completa."""
+    nome, tipo = det["nome"], det.get("tipo")
+    cab = f"➕ {rotulo} ADICIONADA manualmente: {nome}" + (f" ({tipo})" if tipo else "")
+    origem = det.get("desdobramento_de")
+    if not origem:
+        return [cab + " — parâmetros:"] + _linhas_params(det.get("params", {}))
+    situacao = ("REMOVIDA no definitivo — substituição"
+                if _norm_nome(origem) in {_norm_nome(r) for r in removidas}
+                else "MANTIDA no definitivo — coexistem")
+    out = [f"{cab} — DESDOBRAMENTO de '{origem}' ({situacao})"]
+    difs = det.get("diferencas_vs_origem") or []
+    if difs:
+        out.append(f"   · difere de '{origem}' em {len(difs)} parâmetro(s):")
+        for d in difs:
+            out.append(f"   · {d['campo']}: {_fmt_valor(d['campo'], d['de'])} → "
+                       f"{_fmt_valor(d['campo'], d['para'])}")
+    n_iguais = det.get("params_iguais_a_origem")
+    if n_iguais:
+        out.append(f"   · demais {n_iguais} parâmetro(s) iguais aos de '{origem}'")
+    return out
+
+
 def resumo_legivel(rel: dict[str, Any]) -> list[str]:
-    """Linhas legíveis do relatório (para UI/log)."""
+    """Linhas legíveis do relatório (para UI/log e p/ o prompt do aprendizado)."""
     linhas: list[str] = []
     if rel.get("resumo", {}).get("identicos"):
         return ["✓ PJC definitivo idêntico ao gerado — nenhuma correção manual detectada."]
     for grupo, rotulo in (("verbas", "Verba"), ("reflexos", "Reflexo"),
                           ("historicos", "Histórico")):
         g = rel.get(grupo, {})
+        removidas = g.get("removidas", [])
+        detalhes = {d.get("nome"): d for d in g.get("adicionadas_detalhe", [])
+                    if isinstance(d, dict)}
         for n in g.get("adicionadas", []):
-            linhas.append(f"➕ {rotulo} ADICIONADA manualmente: {n}")
-        for n in g.get("removidas", []):
+            det = detalhes.get(n)
+            if det:
+                linhas.extend(_linhas_entidade_adicionada(rotulo, det, removidas))
+            else:  # relatório antigo (sem detalhe)
+                linhas.append(f"➕ {rotulo} ADICIONADA manualmente: {n}")
+        det_rem = {d.get("nome"): d for d in g.get("removidas_detalhe", [])
+                   if isinstance(d, dict)}
+        for n in removidas:
             linhas.append(f"➖ {rotulo} REMOVIDA manualmente: {n}")
+            if det_rem.get(n, {}).get("params"):
+                linhas.extend(_linhas_params(det_rem[n]["params"]))
         for alt in g.get("alteradas", []):
             for c in alt["campos"]:
                 linhas.append(
                     f"✏️ {rotulo} '{alt['nome']}' — {c['campo']}: "
-                    f"{c['de'] if c['de'] is not None else '(vazio)'} → "
-                    f"{c['para'] if c['para'] is not None else '(removido)'}"
+                    f"{_fmt_valor(c['campo'], c['de'])} → "
+                    f"{_fmt_valor(c['campo'], c['para']) if c['para'] is not None else '(removido)'}"
                 )
     for c in rel.get("parametros_calculo", []):
-        linhas.append(f"⚙️ Parâmetro do cálculo — {c['campo']}: {c['de']} → {c['para']}")
+        linhas.append(f"⚙️ Parâmetro do cálculo — {c['campo']}: "
+                      f"{_fmt_valor(c['campo'], c['de'])} → {_fmt_valor(c['campo'], c['para'])}")
     for sec, campos in rel.get("secoes", {}).items():
         for c in campos:
-            linhas.append(f"⚙️ {sec} — {c['campo']}: {c['de']} → {c['para']}")
+            linhas.append(f"⚙️ {sec} — {c['campo']}: "
+                          f"{_fmt_valor(c['campo'], c['de'])} → {_fmt_valor(c['campo'], c['para'])}")
     return linhas
 
 
@@ -377,6 +610,38 @@ def executar_diff_e_persistir(
         sessao_id, rel["resumo"]["campos_alterados"],
         rel["resumo"]["entidades_adicionadas_removidas"],
     )
+    return rel
+
+
+# Chaves do relatório que NÃO vêm do diff (metadados do upload/aprendizado)
+_CHAVES_PRESERVADAS = ("sessao_id", "pjc_gerado", "pjc_definitivo",
+                       "sentenca_definitiva", "aprendizado")
+
+
+def reprocessar_relatorio(sessao_id: str, store_dir,
+                          pjc_gerado_path: str | None = None) -> dict | None:
+    """#80-DP: re-diffa a partir dos arquivos já persistidos (PJC gerado +
+    `<sessao>_definitivo.pjc`), preservando os metadados do upload — p/ que
+    relatórios gerados por versões anteriores do differ ganhem o detalhe das
+    entidades adicionadas antes de uma reanálise. None se faltar arquivo."""
+    from pathlib import Path
+    store = Path(store_dir)
+    rel_antigo = carregar_relatorio(sessao_id, store)
+    if rel_antigo is None:
+        return None
+    ger_path = Path(pjc_gerado_path or (rel_antigo.get("pjc_gerado") or {}).get("arquivo") or "")
+    def_path = store / f"{sessao_id}_definitivo.pjc"
+    if not ger_path.is_file() or not def_path.is_file():
+        logger.warning("reprocessar_relatorio(%s): arquivo ausente (gerado=%s definitivo=%s)",
+                       sessao_id, ger_path, def_path)
+        return None
+    rel = diff_pjc(ger_path.read_bytes(), def_path.read_bytes())
+    for k in _CHAVES_PRESERVADAS:
+        if k in rel_antigo:
+            rel[k] = rel_antigo[k]
+    rel["reprocessado_em"] = datetime.utcnow().isoformat() + "Z"
+    (store / f"{sessao_id}_diff.json").write_text(
+        json.dumps(rel, ensure_ascii=False, indent=2), encoding="utf-8")
     return rel
 
 
