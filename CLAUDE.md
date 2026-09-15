@@ -1795,6 +1795,62 @@ background anexada ao relatório). Testes: `tests/test_pjc_diff.py` +
 históricos `<HistoricoSalarial>`; 1ª ocorrência serializada inline, demais
 como `<internalRef>` — o parser substitui definições aninhadas por `ref:<nome>`.
 
+## Regra obrigatória — Plano 3: entidade ADICIONADA vai com PARÂMETROS, e falha do LLM NUNCA é silenciosa (#80-DP)
+
+> **0001156-86 (15/09/2026):** o calculista desdobrou HORAS EXTRAS 50% e
+> INTERVALO INTERJORNADAS em uma 2ª verba `- REMUNERAÇÃO VARIÁVEL` (base
+> COMISSOES, divisor IMPORTADA_DO_CARTAO=Hs Trabalhadas, multiplicador 0,5 —
+> Súmula 340) + 10 reflexos; o diff detectou 68 campos e 12 entidades, e o
+> aprendizado saiu `regras_novas=0, resumo=""`. Duas causas, ambas corrigidas:
+>
+> 1. **`resumo_legivel` emitia a entidade adicionada só pelo NOME** — a IA não
+>    tinha de onde derivar "base mista → duas verbas". Agora cada verba/reflexo/
+>    histórico adicionado sai com os parâmetros relevantes (mesmo conjunto que
+>    o differ compara em `alteradas`; nulos/boilerplate omitidos) e, quando há
+>    entidade do gerado com nome-prefixo em comum, como **DESDOBRAMENTO de
+>    '<origem>'** com as diferenças lado a lado (`diferencas_vs_origem`) e a
+>    marca "MANTIDA/REMOVIDA no definitivo" (split × rename). Persistido em
+>    `adicionadas_detalhe`/`removidas_detalhe` (as listas `adicionadas`/
+>    `removidas` continuam iguais).
+> 2. **A resposta do LLM veio TRUNCADA pelo `max_tokens=4096` do orquestrador**
+>    → `_parse_response` devolveu str → `analisar_diff` tratou como "sem
+>    regras" e gravou `analisado_em` sem motivo algum. Agora: `max_tokens=16000`
+>    (`MAX_TOKENS_ANALISE`, via novo parâmetro de `LLMOrchestrator.complete`),
+>    UMA reemissão estrita, e o motivo persistido no relatório
+>    (`aprendizado.erro` + `aprendizado.resposta_bruta` truncada) — inclusive
+>    quando a chamada levanta (antes o relatório ficava sem `aprendizado`).
+>    `_call_claude` loga `stop_reason=max_tokens`.
+>
+> **Vínculos por `internalRef` agora resolvem para o nome** (`_mapa_refs`):
+> `<HistoricoSalarial><internalRef>229292</internalRef>` → `ref:COMISSOES`;
+> item de vínculo keyed pelo vinculado (`HistoricoSalarialDaVerba[COMISSOES]`,
+> `CartaoDePontoDaVerba[HS TRABALHADAS]`, `ItemBaseVerba[<verba>]`). Sem isso
+> o histórico-base e a coluna do cartão da verba nova eram DESCARTADOS do diff.
+> Backrefs da entidade a si mesma saem dos params (entre verba e desdobramento
+> sempre "diferem"); `(vazio) ≡ "null"` no diff; `versaoDoSistema` e faixas de
+> IRPF dos honorários são ruído. Efeito no caso: 72 → 45 campos, sinal intacto.
+>
+> **Logs do app NÃO chegavam ao `docker logs`**: só o `_BufferHandler` no root
+> desliga o `lastResort` do Python, e o uvicorn configura apenas os loggers
+> dele. `webapp.py` instala `StreamHandler(stdout)` no root (`LOG_LEVEL`,
+> default INFO; httpx/httpcore/urllib3 em WARNING). Sem isso, TODA falha
+> best-effort (Plano 3, extração, automação) era invisível fora do buffer de
+> 300 linhas — foi assim que o #80-BC nasceu "morto" sem rastro.
+>
+> Reanálise: `POST /api/pjc-definitivo/{sessao}/reanalisar` (re-diffa via
+> `reprocessar_relatorio` preservando metadados e dispara a FATIA 2 com
+> `reexecucao=True` — o ciclo de confiança NÃO roda de novo: não é idempotente).
+> Rodada no 0001156-86: **12 regras novas + 1 reconfirmada** (fixa×variável
+> Súmula 340, aviso indenizado sem INSS/IRPF, reflexos do interjornada
+> inativos, históricos sem INSS em vínculo informal, FGTS DEPOSITAR+multa).
+>
+> ⚠️ Limitação conhecida: o LLM às vezes agrupa vários campos numa regra
+> (`campo="incidenciaFGTS / incidenciaINSS"`); essas chaves nunca casam com um
+> diff real, então o ciclo de confiança as trata sempre como "acerto".
+>
+> Testes: `tests/test_pjc_diff.py::test_dp_*` (5) e
+> `tests/test_pjc_aprendizado.py::test_dp_*` (6).
+
 ## Banco de dados — novos modelos (infrastructure/database.py)
 
 Além dos 5 modelos existentes, **4 novos** para o Learning Engine:

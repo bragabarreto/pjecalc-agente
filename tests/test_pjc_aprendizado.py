@@ -243,3 +243,109 @@ def test_cf_correcao_por_mudanca_da_sentenca_nao_generaliza(db, tmp_path, monkey
     assert regra is not None
     assert regra.confianca < LIMIAR_INJECAO, (
         "correção decorrente da mudança do texto não pode nascer injetável")
+
+
+# ── #80-DP — resposta do LLM inválida NUNCA é silenciosa ─────────────────────
+#
+# 0001156-86 (15/09/2026): a análise devolveu `regras_novas=0, resumo=""` com
+# `analisado_em` preenchido e NENHUM motivo — a resposta (JSON truncado pelo
+# teto de 4096 tokens) virou str, `analisar_diff` a tratou como "sem regras"
+# e o log de warning não chegava ao docker logs.
+
+class _FakeOrchestratorSeq:
+    """Devolve respostas em sequência (1ª chamada, reemissão…) e guarda kwargs."""
+    def __init__(self, *respostas):
+        self.respostas = list(respostas)
+        self.prompts, self.kwargs = [], []
+
+    def complete(self, task_type, prompt, **kw):
+        self.prompts.append(prompt)
+        self.kwargs.append(kw)
+        return self.respostas.pop(0) if self.respostas else self.respostas
+
+
+def test_dp_resposta_nao_json_persiste_erro_e_resposta_bruta(db, tmp_path, monkeypatch):
+    from learning.pjc_aprendizado import MAX_TOKENS_ANALISE
+    _preparar_relatorio(tmp_path, monkeypatch, _rel_diff("sdk1", _campos_divisor()))
+    truncado = '{"regras": [{"verba": "HORAS EXTRAS 50%", "campo": "x", "de": "220", "para": "18'
+    orq = _FakeOrchestratorSeq(truncado, truncado)
+    out = analisar_diff("sdk1", db, orchestrator=orq)
+    assert out["regras_novas"] == 0
+    assert "erro" in out and "regras" in out["erro"], out
+    assert "truncamento" in out["erro"]
+    assert out["resposta_bruta"].startswith('{"regras"')
+    # UMA reemissão estrita, e o teto de saída ampliado nas duas chamadas
+    assert len(orq.prompts) == 2 and "Reemita SOMENTE" in orq.prompts[1]
+    assert all(k.get("max_tokens") == MAX_TOKENS_ANALISE for k in orq.kwargs)
+    assert MAX_TOKENS_ANALISE > 4096
+    # persistido no relatório — o diagnóstico deixa de ser inferencial
+    rel = json.loads((tmp_path / "sdk1_diff.json").read_text(encoding="utf-8"))
+    assert rel["aprendizado"]["erro"] == out["erro"]
+    assert rel["aprendizado"]["resposta_bruta"] == out["resposta_bruta"]
+    assert rel["aprendizado"]["analisado_em"]
+
+
+def test_dp_reemissao_recupera_resposta_valida(db, tmp_path, monkeypatch):
+    _preparar_relatorio(tmp_path, monkeypatch, _rel_diff("sdk2", _campos_divisor()))
+    orq = _FakeOrchestratorSeq("texto solto", _REGRA_LLM)
+    out = analisar_diff("sdk2", db, orchestrator=orq)
+    assert out["regras_novas"] == 1 and "erro" not in out
+    assert len(orq.prompts) == 2
+
+
+def test_dp_excecao_da_chamada_llm_fica_no_relatorio(db, tmp_path, monkeypatch):
+    _preparar_relatorio(tmp_path, monkeypatch, _rel_diff("sdk3", _campos_divisor()))
+
+    class _Explode:
+        def complete(self, *a, **kw):
+            raise RuntimeError("Todos os modelos falharam: 529 overloaded")
+
+    out = analisar_diff("sdk3", db, orchestrator=_Explode())
+    assert out["regras_novas"] == 0 and "529 overloaded" in out["erro"]
+    rel = json.loads((tmp_path / "sdk3_diff.json").read_text(encoding="utf-8"))
+    assert "529 overloaded" in rel["aprendizado"]["erro"], "antes: relatório ficava SEM 'aprendizado'"
+
+
+def test_dp_reexecucao_nao_bonifica_o_ciclo_duas_vezes(db, tmp_path, monkeypatch):
+    """Reanálise do MESMO diff: o ciclo de confiança já rodou na 1ª execução
+    (+0.05 nas regras ativas) e não é idempotente."""
+    from infrastructure.database import RegrasAprendidas
+    _preparar_relatorio(tmp_path, monkeypatch, _rel_diff("s1", _campos_divisor()))
+    analisar_diff("s1", db, orchestrator=_FakeOrchestrator(_REGRA_LLM))
+    r = db.query(RegrasAprendidas).one()
+
+    # 1ª análise de OUTRO diff sem a correção → acerto (+0.05)
+    _preparar_relatorio(tmp_path, monkeypatch, _rel_diff("s9", campos=None))
+    out1 = analisar_diff("s9", db, orchestrator=_FakeOrchestrator({"regras": []}))
+    db.refresh(r)
+    assert out1["acertos"] == 1 and r.confianca == pytest.approx(0.65)
+
+    # reexecução do MESMO diff → NÃO soma outro acerto; relata o anterior
+    out2 = analisar_diff("s9", db, orchestrator=_FakeOrchestrator({"regras": []}),
+                         reexecucao=True)
+    db.refresh(r)
+    assert out2["acertos"] == 1 and r.confianca == pytest.approx(0.65)
+
+
+def test_dp_logs_do_app_chegam_ao_stdout_do_container():
+    """REGRESSÃO: só o _BufferHandler no root desliga o lastResort do Python e
+    NENHUM log stdlib do app chega ao `docker logs` (só o access log do
+    uvicorn). O webapp instala um StreamHandler p/ stdout no root."""
+    src = open("webapp.py", encoding="utf-8").read()
+    assert "_instalar_log_stdout()" in src
+    assert "logging.StreamHandler(_sys.stdout)" in src
+    # e a reanálise tem endpoint próprio (reprocessa o diff + LLM em background)
+    assert '/api/pjc-definitivo/{sessao_id}/reanalisar' in src
+    assert "reprocessar_relatorio" in src
+
+
+def test_dp_orquestrador_aceita_max_tokens():
+    """`complete()`/`_call_claude()` aceitam `max_tokens` (teto de saída por
+    tarefa) e o warning do except não usa kwargs de structlog (TypeError)."""
+    import inspect
+    from core.llm_orchestrator import LLMOrchestrator
+    assert "max_tokens" in inspect.signature(LLMOrchestrator.complete).parameters
+    assert "max_tokens" in inspect.signature(LLMOrchestrator._call_claude).parameters
+    src = open("core/llm_orchestrator.py", encoding="utf-8").read()
+    assert 'model=model_name,' not in src, "logger.warning com kwargs livres levanta TypeError"
+    assert "stop_reason" in src, "truncamento pelo teto de saída deve ser logado"

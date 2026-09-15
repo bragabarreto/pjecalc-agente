@@ -99,6 +99,7 @@ class LLMOrchestrator:
         inject_learned_rules: bool = True,
         images: Optional[list[dict]] = None,
         timeout: int = 120,
+        max_tokens: Optional[int] = None,
     ) -> dict | str:
         """
         Executa uma chamada LLM com roteamento automático e injeção de knowledge.
@@ -111,6 +112,9 @@ class LLMOrchestrator:
             inject_learned_rules: Se True, injeta regras aprendidas relevantes
             images: Lista de {type: "base64", media_type: ..., data: ...} para visão
             timeout: Timeout em segundos para a chamada LLM
+            max_tokens: Teto de saída (default: settings.claude_max_tokens). Tarefas
+                que devolvem JSON longo (análise de diff de PJC) precisam de mais
+                que o default — resposta truncada não parseia e vira str.
 
         Returns:
             dict se a resposta for JSON válido, str caso contrário
@@ -132,16 +136,17 @@ class LLMOrchestrator:
         for model_name in models_to_try:
             try:
                 if model_name == "claude":
-                    raw = self._call_claude(system, prompt, images=images, timeout=timeout)
+                    raw = self._call_claude(system, prompt, images=images, timeout=timeout,
+                                            max_tokens=max_tokens)
                 else:
                     raw = self._call_gemini(system, prompt, timeout=timeout)
                 return self._parse_response(raw)
             except Exception as e:
+                # stdlib logging NÃO aceita kwargs livres (model=…) — a forma
+                # antiga levantava TypeError DENTRO do except e mascarava o erro real.
                 logger.warning(
-                    "llm_call_failed",
-                    model=model_name,
-                    task_type=task_type.value,
-                    error=str(e),
+                    "llm_call_failed model=%s task_type=%s error=%s",
+                    model_name, task_type.value, e,
                 )
                 last_error = e
 
@@ -234,6 +239,7 @@ class LLMOrchestrator:
         prompt: str,
         images: Optional[list[dict]] = None,
         timeout: int = 120,
+        max_tokens: Optional[int] = None,
     ) -> str:
         """
         Chama Claude API (Anthropic).
@@ -265,12 +271,18 @@ class LLMOrchestrator:
 
         response = client.messages.create(
             model=self._settings.claude_model,
-            max_tokens=self._settings.claude_max_tokens,
+            max_tokens=max_tokens or self._settings.claude_max_tokens,
             temperature=self._settings.claude_extraction_temperature,
             system=system,
             messages=[{"role": "user", "content": content}],
             timeout=timeout,
         )
+        if getattr(response, "stop_reason", None) == "max_tokens":
+            logger.warning(
+                "llm_response_truncated model=%s max_tokens=%s — resposta cortada pelo "
+                "teto de saída; JSON provavelmente inválido",
+                self._settings.claude_model, max_tokens or self._settings.claude_max_tokens,
+            )
         return response.content[0].text
 
     # ── Chamadas Gemini ────────────────────────────────────────────────────────
