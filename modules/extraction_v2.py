@@ -1052,20 +1052,44 @@ onde o correto eram **~R$ 5.075,15** — **R$ 9.227 a maior** (2,8× o devido).
 
 #### §4.4.sumula340.mista — REMUNERAÇÃO MISTA (parte FIXA + parte VARIÁVEL) = DUAS VERBAS
 
-⚠️ **INVARIANTE PERMANENTE — NÃO REVERTER** (regra do usuário, 15/09/2026, 0001156-86)
+⚠️ **INVARIANTE PERMANENTE — NÃO REVERTER** (regra do usuário, 15/09/2026,
+0001156-86; **delimitada em 16/09/2026, 0001065-93**)
 
-Quando o empregado tem **salário fixo + parcela variável** (comissões,
-produtividade, prêmios por venda, gorjetas…), **TODA verba de duração do
-trabalho** — HORAS EXTRAS, INTERVALO INTERJORNADAS, INTERVALO INTRAJORNADA,
-ADICIONAL NOTURNO, SOBREAVISO, HORAS IN ITINERE — é emitida como **DUAS
-verbas**, uma por parcela, **mesmo que a sentença não cite a Súmula 340**.
-A hora normal da parcela variável já foi paga nas comissões: sobre ela só cabe
-o **adicional**; sobre a parte fixa cabe a hora **cheia**.
+🚦 **GATILHO ÚNICO: a divisão em duas verbas é usada SOMENTE quando a sentença
+determinar EXPRESSAMENTE a aplicação da Súmula 340 do TST** (ou da OJ 397 da
+SDI-1). Se a sentença NÃO invoca a Súmula 340, **NÃO divida**: emita UMA verba
+de duração do trabalho, com hora cheia (`multiplicador 1.5`) e **todas** as
+parcelas da base em `bases_compostas`. Nunca "aplique" a súmula por conta
+própria a partir do histórico salarial.
 
-❌ **NUNCA** uma verba só com `historico_nome=SALARIO BASE` +
-`bases_compostas=[COMISSOES]` + `multiplicador 1.5` — o PJE-Calc aplicaria a
-hora CHEIA também sobre as comissões (foi o erro do 0001156-86, corrigido à
-mão pelo calculista). ❌ **NUNCA** multiplicador médio.
+❌ **Ter DUAS BASES não é remuneração variável.** Base "salário-base + adicional
+noturno" (Súmula 264 do TST), "salário + insalubridade/periculosidade",
+"salário + gratificação de função" são parcelas de natureza FIXA (percentuais
+sobre o salário) — é UMA verba: `historico_nome=SALARIO BASE` +
+`bases_compostas=[{verba: "ADICIONAL NOTURNO", integralizar: "NAO"}]`, mult
+1.5. Foi o erro do 0001065-93: o sistema criou `HORAS EXTRAS 50% - TEMPO A -
+REMUNERAÇÃO VARIÁVEL` (mult 0.5 sobre o adicional noturno) sem que a sentença
+citasse a Súmula 340, e a fixa perdeu o adicional da base; o calculista
+removeu a verba e devolveu o adicional noturno como histórico-base adicional.
+Remuneração VARIÁVEL para a Súmula 340 é só a paga por resultado: comissões,
+produtividade, peça/tarefa, gorjetas, percentual sobre vendas. Marque
+`parcela: "VARIAVEL"` no histórico salarial APENAS nessas; adicionais legais
+(noturno, insalubridade, periculosidade) são `parcela: "FIXA"`.
+
+Com a Súmula 340 determinada expressamente e o empregado tendo **salário fixo
++ parcela variável** (comissões, produtividade, prêmios por venda, gorjetas…),
+**TODA verba de duração do trabalho** — HORAS EXTRAS, INTERVALO
+INTERJORNADAS, INTERVALO INTRAJORNADA, ADICIONAL NOTURNO, SOBREAVISO, HORAS IN
+ITINERE — é emitida como **DUAS verbas**, uma por parcela. A hora normal da
+parcela variável já foi paga nas comissões: sobre ela só cabe o **adicional**;
+sobre a parte fixa cabe a hora **cheia**. Transcreva a determinação em
+`comentarios` da verba (ex.: "Súmula 340 do TST determinada na sentença").
+
+❌ **NUNCA** (com a Súmula 340 determinada) uma verba só com
+`historico_nome=SALARIO BASE` + `bases_compostas=[COMISSOES]` +
+`multiplicador 1.5` — o PJE-Calc aplicaria a hora CHEIA também sobre as
+comissões (foi o erro do 0001156-86, corrigido à mão pelo calculista).
+❌ **NUNCA** multiplicador médio.
 
 **Receita (PJC definitivo do calculista, CALCULO_278573):**
 

@@ -4921,7 +4921,8 @@ def test_inv148_evolucao_espera_a_listagem_renderizar():
 
 def _previa_sumula_340_mista(nome="HORAS EXTRAS 50%", alvo="HORAS EXTRAS 50%",
                              qtd_tipo="IMPORTADA_DO_CARTAO", mult=1.5,
-                             estrategia="expresso_direto", comentarios="HE 50%",
+                             estrategia="expresso_direto",
+                             comentarios="HE 50% — Súmula 340 do TST determinada na sentença",
                              bases_compostas=None, hist_var_parcela="VARIAVEL"):
     pc = {"estado_uf": "CE", "municipio": "X", "data_admissao": "10/07/2025",
           "data_demissao": "17/04/2026", "data_ajuizamento": "01/05/2026",
@@ -5053,14 +5054,14 @@ def test_inv149_sumula_340_base_mista_divide_em_duas_verbas():
     assert len(normalize_v2_json(d)["verbas_principais"]) == 2
 
     # sinal secundário: sem bases_compostas, mas comentário cita comissões e
-    # há exatamente UM histórico VARIAVEL → divide também
+    # há exatamente UM histórico VARIAVEL → divide também (com a súmula expressa)
     out = normalize_v2_json(_previa_sumula_340_mista(
-        bases_compostas=[], comentarios="HE sobre salario fixo + comissoes"))
+        bases_compostas=[], comentarios="HE sobre salario fixo + comissoes (Súmula 340 TST)"))
     assert len(out["verbas_principais"]) == 2
 
     # NÃO divide: base composta só de parcelas FIXAS
     out = normalize_v2_json(_previa_sumula_340_mista(hist_var_parcela="FIXA",
-                                                     comentarios="HE"))
+                                                     comentarios="HE (Súmula 340 TST)"))
     assert len(out["verbas_principais"]) == 1
     # NÃO divide: verba que não é de duração do trabalho
     out = normalize_v2_json(_previa_sumula_340_mista(nome="ADICIONAL DE INSALUBRIDADE",
@@ -5070,19 +5071,26 @@ def test_inv149_sumula_340_base_mista_divide_em_duas_verbas():
 
 def test_inv150_sumula_340_duas_verbas_no_prompt():
     """#80-DK: a receita das DUAS verbas (fixa × variável) tem de estar no
-    prompt — camada primária; o normalizer é salvaguarda."""
+    prompt — camada primária; o normalizer é salvaguarda.
+
+    #80-DR (16/09/2026): o gatilho é a determinação EXPRESSA da Súmula 340 na
+    sentença — o antigo "mesmo que a sentença não cite" foi REVOGADO pelo
+    usuário (0001065-93: duas bases ≠ remuneração variável)."""
     from modules.extraction_v2 import SYSTEM_PROMPT_V2_EXTERNAL as P
     assert "§4.4.sumula340.mista" in P, "REGRESSÃO #80-DK: seção da remuneração mista sumiu"
     for frag in (
         "uma por parcela",
         "- REMUNERAÇÃO VARIÁVEL",
         "Hs Trabalhadas",
-        "mesmo que a sentença não cite a Súmula 340",
+        "SOMENTE quando a sentença\ndeterminar EXPRESSAMENTE a aplicação da Súmula 340",
+        "Ter DUAS BASES não é remuneração variável",
         "INTERVALO INTERJORNADAS", "INTERVALO INTRAJORNADA", "ADICIONAL NOTURNO",
         "`parametros.parcela`", "`VARIAVEL`",
         "NUNCA** multiplicador médio",
     ):
-        assert frag in P, f"REGRESSÃO #80-DK: '{frag}' sumiu do prompt"
+        assert frag in P, f"REGRESSÃO #80-DK/#80-DR: '{frag}' sumiu do prompt"
+    assert "mesmo que a sentença não cite a Súmula 340" not in P, (
+        "REGRESSÃO #80-DR: o prompt voltou a mandar dividir sem a súmula expressa")
     # a proibição de divisor importado do cartão abre exceção para a parcela variável
     assert "Única exceção: a verba **`- REMUNERAÇÃO VARIÁVEL`**" in P
 
@@ -5399,3 +5407,151 @@ def test_inv157_apuracao_unica_multi_cartao_e_excluir_apuracao_anterior():
     # verificação global: união dos meses de todos os cartões
     assert "cartoes: list | None = None" in corpo and "for _c in _alvos" in corpo, (
         "REGRESSÃO #80-DQ: verificação da tabela deixou de cobrir todos os cartões")
+
+
+# ─── #80-DR — divisão Súmula 340 SÓ com determinação EXPRESSA na sentença ───
+
+
+def test_inv158_sumula_340_divisao_so_com_determinacao_expressa():
+    """#80-DR (0001065-93, 16/09/2026): a divisão em duas verbas (#80-DK) só é
+    usada quando a sentença determina EXPRESSAMENTE a Súmula 340 do TST.
+
+    Bug: sentença com base "salário-base + adicional noturno" (Súmula 264),
+    sem citar a Súmula 340; a IA concluiu na Etapa 1 que a súmula não se
+    aplicava e emitiu UMA verba com `bases_compostas=[ADICIONAL NOTURNO]`;
+    o normalizer dividiu assim mesmo porque o histórico ADICIONAL NOTURNO
+    estava `parcela=VARIAVEL` — e a fixa PERDEU o adicional da base. O
+    calculista removeu `... - REMUNERAÇÃO VARIÁVEL` e devolveu o adicional
+    como histórico-base (PJC definitivo CALCULO_278804)."""
+    from modules.json_normalizer import (
+        normalize_v2_json, _menciona_sumula_340_expressa as men)
+
+    # o caso real: adicional noturno VARIAVEL no histórico, sentença silente
+    d = _previa_sumula_340_mista(
+        nome="HORAS EXTRAS 50% - TEMPO A DISPOSICAO", alvo="HORAS EXTRAS 50%",
+        bases_compostas=[{"verba": "ADICIONAL NOTURNO", "integralizar": "NAO"}],
+        comentarios="Base Sumula 264 TST: salario-base + adicional noturno. Divisor 220.")
+    d["historico_salarial"] = [{"nome": "SALÁRIO BASE", "parcela": "FIXA"},
+                               {"nome": "ADICIONAL NOTURNO", "parcela": "VARIAVEL"}]
+    out = normalize_v2_json(d)
+    vs = out["verbas_principais"]
+    assert len(vs) == 1, "REGRESSÃO #80-DR: dividiu sem a Súmula 340 expressa"
+    fc = vs[0]["parametros"]["formula_calculado"]
+    assert fc["multiplicador"] == 1.5
+    assert fc["base_calculo"]["bases_compostas"] == [
+        {"verba": "ADICIONAL NOTURNO", "integralizar": "NAO"}], (
+        "a fixa NÃO pode perder o adicional noturno da base (Súmula 264)")
+
+    # com o TEXTO da sentença: ele manda, mesmo que a verba cite a súmula
+    sent_sem = "Base de cálculo composta por salário-base + adicional noturno (Súmula 264 do TST)."
+    sent_com = "Horas extras sobre comissões, apenas o adicional, na forma da Súmula 340 do TST."
+    d2 = _previa_sumula_340_mista()  # comentário cita a súmula
+    assert len(normalize_v2_json(d2, sentenca_texto=sent_sem)["verbas_principais"]) == 1
+    assert len(normalize_v2_json(d2, sentenca_texto=sent_com)["verbas_principais"]) == 2
+    # sem texto da sentença: a menção na PRÓPRIA verba decide
+    assert len(normalize_v2_json(_previa_sumula_340_mista(comentarios="HE 50%"))["verbas_principais"]) == 1
+    assert len(normalize_v2_json(_previa_sumula_340_mista(
+        comentarios="na forma da OJ 397 da SDI-1"))["verbas_principais"]) == 2
+    # menção NEGADA não é determinação expressa
+    assert len(normalize_v2_json(_previa_sumula_340_mista(
+        comentarios="a sentença não menciona Súmula 340; base Súmula 264"))["verbas_principais"]) == 1
+
+    # detector
+    assert men("aplica-se a Súmula 340 do TST") is True
+    assert men("Súmula nº 340 do C. TST") is True
+    assert men("OJ 397 da SDI-1") is True
+    assert men("Súmula 264 do TST") is False
+    assert men("não se aplica a Súmula 340") is False
+    assert men("sem aplicação da Súmula 340") is False
+    assert men("") is False and men(None) is False
+
+    # a Etapa 2 da extração in-app PASSA o texto da sentença ao normalizer
+    src = (REPO_ROOT / "modules" / "webapp_extracao.py").read_text(encoding="utf-8")
+    assert "def _texto_sentenca_para_normalizer" in src
+    assert "normalize_v2_json(\n            payload, sentenca_texto=_texto_sentenca_para_normalizer(estado)" in src, (
+        "REGRESSÃO #80-DR: Etapa 2 deixou de passar a sentença ao normalizer")
+    # só a sentença, não os documentos extras (CCT/contracheque podem citar a súmula)
+    assert '"senten" not in str(meta.get("contexto")' in src
+
+
+# ─── #80-DS — férias GOZADAS sem gozo na aba ⇒ ocorrência no desligamento ───
+
+
+def test_inv159_ferias_gozadas_sem_gozo_na_aba_ocorrem_no_desligamento():
+    """#80-DS (0001065-93, 16/09/2026): o PJE-Calc só pré-preenche o gozo da
+    linha cujo concessivo termina até a dispensa. GOZADAS marcada num PA cujo
+    concessivo ainda corre fica SEM gozo (`gozo null` no PJC) e a ocorrência
+    da verba cai no DESLIGAMENTO — mesma data do PA proporcional.
+
+    A cadeia antiga previa o "gozo padrão" (22/06/2026, depois da dispensa de
+    09/06/2026 e fora do período da verba): o #80-CX abortava com "1 PA
+    elegível × 2 linhas" e a ocorrência do PA gozado (NÃO deferido) ficava
+    ATIVA e valorada — R$ 2.717,80 a maior; o calculista zerou-a à mão."""
+    from datetime import datetime
+    from modules.json_normalizer import _fer_data_ocorrencia, normalize_v2_json
+
+    dem = datetime(2026, 6, 9)
+    # PA 2023/24: concessivo até 21/07/2025 ≤ dispensa ⇒ gozo padrão 22/06/2025
+    pa1 = {"periodo_aquisitivo_inicio": "22/07/2023", "periodo_aquisitivo_fim": "21/07/2024",
+           "prazo_dias": 30, "situacao": "GOZADAS", "deferido": False}
+    assert _fer_data_ocorrencia(pa1, dem) == datetime(2025, 6, 22)
+    # PA 2024/25: concessivo até 21/07/2026 > dispensa ⇒ sem gozo ⇒ DESLIGAMENTO
+    pa2 = {"periodo_aquisitivo_inicio": "22/07/2024", "periodo_aquisitivo_fim": "21/07/2025",
+           "prazo_dias": 30, "situacao": "GOZADAS", "deferido": False}
+    assert _fer_data_ocorrencia(pa2, dem) == dem, (
+        "REGRESSÃO #80-DS: GOZADAS sem gozo possível voltou a prever gozo após a dispensa")
+    # gozo DECLARADO segue prevalecendo
+    assert _fer_data_ocorrencia(dict(pa2, gozo_1={"data_inicio": "01/02/2026"}), dem) == datetime(2026, 2, 1)
+    # proporcional (INDENIZADAS) no desligamento
+    pa3 = {"periodo_aquisitivo_inicio": "22/07/2025", "periodo_aquisitivo_fim": "09/06/2026",
+           "prazo_dias": 30, "situacao": "INDENIZADAS", "deferido": True}
+    assert _fer_data_ocorrencia(pa3, dem) == dem
+
+    # #80-CY não estreita o período (a não deferida divide a data com a deferida):
+    # o remédio é o #80-CX zerar a linha 0 — e agora as contagens casam (2 × 2)
+    d = {"parametros_calculo": {"estado_uf": "CE", "municipio": "X",
+                                "data_admissao": "22/07/2023", "data_demissao": "09/06/2026",
+                                "data_ajuizamento": "07/07/2026",
+                                "data_inicio_calculo": "22/07/2023", "data_termino_calculo": "15/07/2026"},
+         "ferias": {"periodos": [pa1, pa2, pa3]},
+         "verbas_principais": [{"id": "v04", "nome_pjecalc": "FÉRIAS + 1/3",
+                                "expresso_alvo": "FÉRIAS + 1/3",
+                                "estrategia_preenchimento": "expresso_direto",
+                                "parametros": {"caracteristica": "FERIAS",
+                                               "ocorrencia_pagamento": "PERIODO_AQUISITIVO",
+                                               "periodo_inicio": "22/07/2025",
+                                               "periodo_fim": "09/06/2026"}}]}
+    out = normalize_v2_json(d)
+    p = out["verbas_principais"][0]["parametros"]
+    assert p["periodo_inicio"] == "22/07/2025" and p["periodo_fim"] == "09/06/2026"
+    pi, pf = datetime(2025, 7, 22), datetime(2026, 6, 9)
+    eleg = [pa for pa in (pa1, pa2, pa3) if pi <= _fer_data_ocorrencia(pa, dem) <= pf]
+    assert [e["periodo_aquisitivo_inicio"] for e in eleg] == ["22/07/2024", "22/07/2025"], (
+        "linha 0 = PA 2024/25 (NÃO deferido → zerar), linha 1 = proporcional (deferido)")
+    # o bot documenta a regra e o abort NUNCA é silencioso sobre a consequência
+    corpo = PLAYWRIGHT_V2[PLAYWRIGHT_V2.find("def _filtrar_ferias_por_periodo_aquisitivo"):
+                          PLAYWRIGHT_V2.find("def _abrir_ocorrencias_da_verba")]
+    assert "#80-DS" in corpo
+    assert "ficam ATIVAS" in corpo
+
+
+# ─── #80-DT — gate pós-PJC lê os timestamps no fuso do PJE-Calc ─────────────
+
+
+def test_inv160_gate_pos_pjc_timestamps_no_fuso_do_pjecalc():
+    """#80-DT (0001065-93, 16/09/2026): o PJC grava meia-noite BRT em ms e o
+    container roda em UTC. `fromtimestamp()` devolvia 03:00, e a ocorrência
+    de 09/06/2026 (exatamente a deferida) caía FORA da janela cujo fim é
+    09/06/2026 00:00 — o painel acusava "13º a maior R$ 1.192,02" à toa."""
+    src = PLAYWRIGHT_V2
+    i = src.find("def _verificar_escopo_deferido_pjc")
+    corpo = src[i:i + 3000]
+    assert "tz=_dtm.timezone(_dtm.timedelta(hours=-3))" in corpo, (
+        "REGRESSÃO #80-DT: o gate voltou a converter os ms do PJC no fuso do container")
+    assert ".replace(tzinfo=None)" in corpo
+    import datetime as _dtm
+    ms = 1780974000000  # 09/06/2026 00:00 BRT (= 03:00 UTC)
+    dt = _dtm.datetime.fromtimestamp(ms / 1000, tz=_dtm.timezone(_dtm.timedelta(hours=-3))).replace(tzinfo=None)
+    assert dt == _dtm.datetime(2026, 6, 9, 0, 0), dt
+    assert _dtm.datetime(2026, 1, 1) <= dt <= _dtm.datetime(2026, 6, 9)
+

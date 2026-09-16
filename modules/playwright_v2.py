@@ -3312,6 +3312,17 @@ class PlaywrightAutomatorV2:
             data da ocorrência = início do gozo (gozadas) | desligamento
             elegível ⟺ data ∈ [periodo_inicio, periodo_fim]        31/31
             gozo padrão = fim do concessivo − (prazo − 1) dias    151/151
+            GOZADAS sem gozo na aba (concessivo termina APÓS a dispensa)
+                               ⟹ ocorrência no DESLIGAMENTO            #80-DS
+
+        ⚠ #80-DS (0001065-93, 16/09/2026): o PJE-Calc só pré-preenche o gozo
+        quando o concessivo termina até a dispensa; GOZADAS marcada pelo
+        revisor num PA cujo concessivo ainda corre fica SEM gozo e a
+        ocorrência cai no desligamento — mesma data do PA proporcional. A
+        cadeia antiga previa o "gozo padrão" (depois da dispensa, fora do
+        período) e este filtro abortava com "1 PA elegível × 2 linhas";
+        a ocorrência do PA gozado ficava ATIVA e valorada (R$ 2.717,80 a
+        maior). A derivação vive em `_fer_data_ocorrencia` (normalizer).
 
         ⚠ A fórmula anterior (`1º PA = max(admissão, aniversário ≤ periodo_inicio
         − 1 ano)`; `PA[k] = 1º PA + k`) era um PROXY do gozo padrão. Ela ficou
@@ -3386,7 +3397,10 @@ class PlaywrightAutomatorV2:
             self.log(
                 f"    🛑 #80-CX abortado em '{nome}': {len(elegiveis)} PA(s) "
                 f"elegível(is) × {len(linhas)} linha(s) na grade — não casa; "
-                f"elegíveis={[e[0].strftime('%d/%m/%Y') for e in elegiveis]}"
+                f"elegíveis={[(e[0].strftime('%d/%m/%Y'), e[2].strftime('%d/%m/%Y')) for e in elegiveis]}"
+                f" (PA, data prevista) × grade={[r.get('dataInicial') for r in linhas]}"
+                " — as ocorrências de PA NÃO deferido ficam ATIVAS: zere-as no "
+                "PJE-Calc antes de incorporar (#80-DS)"
             )
             return
         fora = []
@@ -15090,8 +15104,17 @@ class PlaywrightAutomatorV2:
             return res
 
         def _ms(txt):
+            # #80-DT (0001065-93, 16/09/2026): o PJC grava meia-noite BRT em
+            # ms; o container roda em UTC, então fromtimestamp() devolvia
+            # 03:00 — e "09/06/2026 03:00" caía FORA da janela cujo fim é
+            # 09/06/2026 00:00. O gate acusava "13º a maior R$ 1.192,02" para a
+            # ocorrência que era exatamente a deferida. Converter no fuso do
+            # PJE-Calc (UTC−3) e descartar o tzinfo p/ comparar com as datas
+            # da prévia (naive).
             try:
-                return _dtm.datetime.fromtimestamp(int(txt) / 1000)
+                return _dtm.datetime.fromtimestamp(
+                    int(txt) / 1000, tz=_dtm.timezone(_dtm.timedelta(hours=-3))
+                ).replace(tzinfo=None)
             except Exception:
                 return None
 
@@ -15446,7 +15469,11 @@ class PlaywrightAutomatorV2:
             d = oc.find("dataOcorrencia")
             v = oc.find("valor")
             try:
-                dt = _dtm.datetime.fromtimestamp(int((d.text or "").strip()) / 1000)
+                # #80-DT: fuso do PJE-Calc (UTC−3), não o do container
+                dt = _dtm.datetime.fromtimestamp(
+                    int((d.text or "").strip()) / 1000,
+                    tz=_dtm.timezone(_dtm.timedelta(hours=-3)),
+                ).replace(tzinfo=None)
             except Exception:
                 continue
             try:

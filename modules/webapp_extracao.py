@@ -232,6 +232,47 @@ def _arquivo_para_bloco(meta: dict) -> list[dict]:
     return [{"type": "text", "text": f"{prefixo}\n{txt[:50000]}"}]
 
 
+def _texto_sentenca_para_normalizer(estado: dict) -> str | None:
+    """Texto da SENTENÇA (não dos documentos extras) p/ o normalizer — #80-DR.
+
+    O normalizer decide se a Súmula 340 foi determinada EXPRESSAMENTE pela
+    sentença (divisão #80-DK). Fontes: o texto colado + o arquivo enviado como
+    "sentença/decisão principal" (PDF via pdfplumber, DOCX, TXT/MD). Best-effort:
+    qualquer falha devolve None e o normalizer cai no fallback (texto da verba).
+    Documentos extras (CCT, contracheques) NÃO entram — poderiam citar a súmula
+    sem que a sentença a determine.
+    """
+    partes: list[str] = []
+    try:
+        texto = (estado.get("texto_colado") or "").strip()
+        if texto:
+            partes.append(texto)
+        for meta in estado.get("arquivos", []) or []:
+            if "senten" not in str(meta.get("contexto") or "").lower():
+                continue
+            if meta.get("tipo") == "imagem":
+                continue
+            path = Path(meta.get("caminho") or "")
+            if not path.is_file():
+                continue
+            suf = path.suffix.lower()
+            try:
+                if suf == ".pdf":
+                    from modules.ingestion import _ler_pdf
+                    partes.append(str(_ler_pdf(path, []).get("texto") or ""))
+                elif suf in (".docx", ".doc"):
+                    from modules.ingestion import _ler_docx
+                    partes.append(str(_ler_docx(path, []).get("texto") or ""))
+                elif suf in (".txt", ".md", ".csv"):
+                    partes.append(path.read_text(encoding="utf-8", errors="replace"))
+            except Exception as e:  # noqa: BLE001
+                logger.warning("texto da sentença p/ normalizer (%s): %s", path.name, e)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("texto da sentença p/ normalizer: %s", e)
+    txt = "\n\n".join(t for t in partes if t and t.strip())
+    return txt if txt.strip() else None
+
+
 def _montar_conteudo_etapa1(estado: dict) -> list[dict]:
     """Remonta os blocos da 1ª mensagem do usuário a partir do estado."""
     blocos: list[dict] = []
@@ -440,7 +481,10 @@ def _worker_etapa2(sessao_id: str) -> None:
         from modules.json_normalizer import normalize_v2_json
         from modules.webapp_v2 import PreviaCalculoV2, _save_previa
 
-        payload = normalize_v2_json(payload)
+        # #80-DR: a sentença é a fonte da determinação expressa da Súmula 340
+        payload = normalize_v2_json(
+            payload, sentenca_texto=_texto_sentenca_para_normalizer(estado)
+        )
         previa = PreviaCalculoV2.model_validate(payload)
         _previa_dump = previa.model_dump()
         _save_previa(sessao_id, _previa_dump)

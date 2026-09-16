@@ -467,6 +467,46 @@ def _periodo_contem_dezembro(pi_str: str, pf_str: str) -> bool:
     return False
 
 
+# #80-DR (0001065-93, 16/09/2026) — a DIVISÃO em duas verbas (#80-DK) só é
+# usada quando a sentença determina EXPRESSAMENTE a Súmula 340 (ou a OJ 397 da
+# SDI-1, que é a mesma regra p/ o comissionista). Menção acompanhada de negação
+# na vizinhança ("não se aplica a Súmula 340", "sem aplicação da Súmula 340",
+# "a sentença não menciona Súmula 340") NÃO é determinação expressa.
+_SUM340_EXPRESSA_RE = None  # compilado sob demanda em _menciona_sumula_340_expressa
+_SUM340_NEGACAO_RE = None
+
+
+def _menciona_sumula_340_expressa(texto: Any) -> bool:
+    """O texto invoca EXPRESSAMENTE a Súmula 340 do TST (ou OJ 397 SDI-1)?
+
+    Comparação sem acentos/caixa. Uma menção NEGADA numa janela de ±70
+    caracteres ("não se aplica", "não menciona", "sem aplicação", "afasta",
+    "inaplicável", "não incide", "não cabe") não conta.
+    """
+    global _SUM340_EXPRESSA_RE, _SUM340_NEGACAO_RE
+    import re as _re
+    if _SUM340_EXPRESSA_RE is None:
+        _SUM340_EXPRESSA_RE = _re.compile(
+            r"(?:SUM(?:ULA|\.)?\s*(?:N[O.]?\s*)?340\b"
+            r"|\bOJ\s*-?\s*(?:N[O.]?\s*)?397\b"
+            r"|ORIENTACAO\s+JURISPRUDENCIAL\s+(?:N[O.]?\s*)?397\b)"
+        )
+        _SUM340_NEGACAO_RE = _re.compile(
+            r"(?:\bNAO\s+(?:SE\s+)?(?:APLIC|INCID|MENCION|CIT|INVOC|DETERMIN|CABE|HA\b|FALA|TRAT)"
+            r"|\bSEM\s+(?:APLICA|MENCAO|INVOCA|REFERENCIA)"
+            r"|\bINAPLIC|\bAFAST|\bDESCAB|\bNAO\s+E\s+O\s+CASO)"
+        )
+    t = _sa_upper(texto)
+    if not t:
+        return False
+    for m in _SUM340_EXPRESSA_RE.finditer(t):
+        janela = t[max(0, m.start() - 70): m.end() + 70]
+        if _SUM340_NEGACAO_RE.search(janela):
+            continue
+        return True
+    return False
+
+
 _SUM340_SINAIS = (
     "SUMULA 340", "SÚMULA 340", "SUM 340", "SUM. 340", "S. 340",
     "OJ 397", "OJ-397", "ORIENTACAO JURISPRUDENCIAL 397",
@@ -763,10 +803,35 @@ def _verba_irma_variavel_existe(verbas: list, v: dict) -> bool:
     return False
 
 
-def _norm_sumula_340_base_mista_duas_verbas(data: dict[str, Any]) -> None:
+def _norm_sumula_340_base_mista_duas_verbas(
+    data: dict[str, Any], sentenca_texto: str | None = None
+) -> None:
     """Súmula 340 TST — verba de duração do trabalho com base MISTA → DUAS verbas (#80-DK).
 
     INVARIANTE PERMANENTE — NÃO REVERTER.
+
+    ⚠ #80-DR (regra do usuário, 16/09/2026, 0001065-93) — **a divisão SÓ é
+    usada quando a sentença determina EXPRESSAMENTE a aplicação da Súmula 340
+    do TST** (ou da OJ 397 da SDI-1). Supersede o "mesmo que a sentença não
+    cite a súmula" do #80-DK. Ter duas bases (salário-base + adicional
+    noturno, Súmula 264) NÃO é remuneração variável: é UMA verba com hora
+    cheia e o adicional em `bases_compostas`.
+
+    Bug que motivou: a IA concluiu na Etapa 1 que a Súmula 340 não se aplicava
+    (sentença silente; adicional noturno é parcela fixa por natureza) e emitiu
+    UMA verba com `bases_compostas=[ADICIONAL NOTURNO]`; este normalizer
+    DIVIDIU assim mesmo porque o histórico ADICIONAL NOTURNO estava marcado
+    `parcela=VARIAVEL`. Saíram `HORAS EXTRAS 50% - TEMPO A - REMUNERAÇÃO
+    VARIÁVEL` e `INTERVALO INTRAJORNADA - REMUNERAÇÃO VARIÁVEL` (mult 0.5
+    sobre o adicional noturno) e a fixa PERDEU o adicional da base. O
+    calculista removeu as duas e devolveu o ADICIONAL NOTURNO como histórico
+    adicional da base (PJC definitivo CALCULO_278804).
+
+    Fonte da determinação expressa, em ordem: (1) `sentenca_texto` — o texto
+    da sentença, quando o chamador o tem (extração in-app, Etapa 2);
+    (2) sem o texto, o que a IA transcreveu na própria verba (`nome_pjecalc`,
+    `nome_sentenca`, `comentarios`). Menção negada ("não se aplica a Súmula
+    340") não conta — ver `_menciona_sumula_340_expressa`.
 
     O #80-CH detectava a base mista (histórico FIXO em `historico_nome` +
     parcela VARIÁVEL em `bases_compostas`) e apenas AVISAVA. Como a IA
@@ -806,6 +871,12 @@ def _norm_sumula_340_base_mista_duas_verbas(data: dict[str, Any]) -> None:
     ]
     novas: list[tuple[int, dict]] = []
     ids_existentes = {str(x.get("id")) for x in verbas if isinstance(x, dict)}
+    # #80-DR: com o texto da sentença em mãos, ele é a ÚNICA fonte da
+    # determinação expressa (a IA pode mencionar a súmula por conta própria).
+    sentenca_expressa: bool | None = None
+    if sentenca_texto is not None and str(sentenca_texto).strip():
+        sentenca_expressa = _menciona_sumula_340_expressa(sentenca_texto)
+    _avisou_sem_sumula = False
     for i, v in enumerate(verbas):
         if not isinstance(v, dict) or not _eh_verba_duracao_trabalho(v):
             continue
@@ -819,6 +890,24 @@ def _norm_sumula_340_base_mista_duas_verbas(data: dict[str, Any]) -> None:
         if not nome_base or _tem_sufixo_variavel(nome_base):
             continue
         if _verba_irma_variavel_existe(verbas, v):
+            continue
+        # ── #80-DR: gate da determinação EXPRESSA da Súmula 340 ──
+        if sentenca_expressa is not None:
+            expressa = sentenca_expressa
+        else:
+            expressa = _menciona_sumula_340_expressa(" ".join([
+                nome_base, str(v.get("nome_sentenca") or ""),
+                str(p.get("comentarios") or "")]))
+        if not expressa:
+            if not _avisou_sem_sumula:
+                _log.info(
+                    "Normalizer #80-DR: Súmula 340 NÃO determinada expressamente "
+                    "(%s) — verbas de duração do trabalho ficam ÚNICAS, com todas "
+                    "as bases em bases_compostas (sem divisão #80-DK)",
+                    "sentença silente" if sentenca_expressa is not None
+                    else "sem menção na verba",
+                )
+                _avisou_sem_sumula = True
             continue
         fc = p.get("formula_calculado")
         if not isinstance(fc, dict):
@@ -1121,6 +1210,21 @@ def _fer_data_ocorrencia(pa: dict, dem_d):
 
     GOZADAS → início do gozo (o declarado, ou o padrão do PJE-Calc: fim do
     concessivo − (prazo − 1) dias). Demais → o desligamento.
+
+    ⚠ #80-DS (0001065-93, 16/09/2026): o PJE-Calc só PRÉ-PREENCHE o gozo da
+    linha cuja situação ele mesmo sugere como GOZADAS — isto é, quando o
+    concessivo termina em/antes do desligamento (manual §7). Quando o revisor
+    marca GOZADAS num PA cujo concessivo ainda corre na dispensa (o PJE-Calc
+    sugerira INDENIZADAS), a linha da aba fica **sem gozo** (`gozo null` no
+    PJC) e a ocorrência da verba cai no **DESLIGAMENTO** — não no "gozo
+    padrão", que nem existe nessa linha (cairia depois da dispensa).
+
+    Medido no PJC gerado do 0001065-93: PA 22/07/2024→21/07/2025, concessivo
+    até 21/07/2026, dispensa 09/06/2026, aba `GOZADAS` com gozo `null` ⇒
+    ocorrência em 09/06/2026 (mesma data do PA proporcional). A fórmula
+    antiga previa 22/06/2026 (> período da verba) e o #80-CX abortava com
+    "1 PA elegível × 2 linhas" — a ocorrência não deferida ficou ativa e
+    valorada (R$ 2.717,80 a maior).
     """
     from datetime import timedelta as _td
     sit = str(pa.get("situacao") or "").upper()
@@ -1138,6 +1242,11 @@ def _fer_data_ocorrencia(pa: dict, dem_d):
             pa_fim = _fer_mais_anos(pa_ini, 1) - _td(days=1)
         # concessivo termina um ano depois do fim do aquisitivo
         conc_fim = _fer_mais_anos(pa_fim, 1)
+        # #80-DS: concessivo que termina DEPOIS do desligamento ⇒ o PJE-Calc
+        # não sugere gozo p/ esta linha (sugere INDENIZADAS); GOZADAS sem gozo
+        # declarado ⇒ ocorrência no desligamento.
+        if dem_d is not None and conc_fim > dem_d:
+            return dem_d
         try:
             prazo = int(pa.get("prazo_dias") or 30)
         except (TypeError, ValueError):
@@ -2496,11 +2605,18 @@ def _norm_turnos_meia_noite(data: dict[str, Any]) -> None:
         )
 
 
-def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
+def normalize_v2_json(
+    payload: dict[str, Any], *, sentenca_texto: str | None = None
+) -> dict[str, Any]:
     """Normaliza JSON v2 legacy para o formato canônico.
 
     Idempotente: aplicar várias vezes não muda o resultado. Não muta o
     payload original — retorna deep-copy normalizado.
+
+    `sentenca_texto` (opcional, #80-DR): texto da sentença quando o chamador o
+    tem (Etapa 2 da extração in-app). É a fonte primária p/ decidir se a
+    Súmula 340 foi determinada EXPRESSAMENTE (divisão #80-DK). Sem ele, o
+    normalizer usa o que a IA transcreveu na própria verba.
     """
     if not isinstance(payload, dict):
         return payload
@@ -2624,7 +2740,8 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # Salvaguarda #80-DK (ANTES do #80-CH): base MISTA (histórico fixo +
     # parcela variável) → DUAS verbas, fixa (hora cheia) + "- REMUNERAÇÃO
     # VARIÁVEL" (só o adicional, base comissões, divisor Hs Trabalhadas).
-    _norm_sumula_340_base_mista_duas_verbas(data)
+    # #80-DR: SOMENTE quando a sentença determina EXPRESSAMENTE a Súmula 340.
+    _norm_sumula_340_base_mista_duas_verbas(data, sentenca_texto=sentenca_texto)
     _norm_sumula_340_multiplicador(data)
 
     # Salvaguarda #80-CR: SALDO DE SALÁRIO = CALCULADO + proporcionalidade,

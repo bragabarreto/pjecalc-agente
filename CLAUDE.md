@@ -698,6 +698,57 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Férias GOZADAS sem gozo na aba ocorrem no DESLIGAMENTO (#80-DS)
+
+> **O PJE-Calc só pré-preenche o gozo da linha cujo concessivo termina até a
+> dispensa (é a que ele mesmo sugere como GOZADAS — manual §7). Quando o
+> revisor marca GOZADAS num PA cujo concessivo ainda corre na dispensa (o
+> PJE-Calc sugerira INDENIZADAS), a linha fica SEM gozo (`gozo null` no PJC)
+> e a ocorrência da verba cai no DESLIGAMENTO — mesma data do PA
+> proporcional.**
+>
+> **0001065-93 (16/09/2026):** admissão 22/07/2023, dispensa 09/06/2026;
+> sentença defere só as férias proporcionais 2025/2026. Aba: PA 2023/24
+> GOZADAS (gozo auto 22/06/2025→21/07/2025), PA 2024/25 GOZADAS **sem gozo**
+> (concessivo até 21/07/2026 > dispensa), proporcional sem linha (#80-DE).
+> A cadeia `_fer_data_ocorrencia` previa p/ o PA 2024/25 o "gozo padrão"
+> 22/06/2026 — depois da dispensa e fora do período da verba (22/07/2025→
+> 09/06/2026) — logo 1 PA elegível; a grade tinha 2 linhas (ambas em
+> 09/06/2026) e o #80-CX **abortou** ("não casa"). A ocorrência do PA gozado,
+> NÃO deferido, ficou ATIVA e valorada: **R$ 2.717,80 a maior**. O calculista
+> zerou-a à mão (definitivo: `devido=null` no PA 2024/25, R$ 2.734,73 só no
+> proporcional). O gate #80-CG/CT acusou corretamente, mas só depois.
+>
+> **Fix (`_fer_data_ocorrencia`):** GOZADAS/PARCIAL_GOZADAS sem gozo declarado
+> e `fim do concessivo > desligamento` ⇒ data da ocorrência = desligamento.
+> Efeito: elegíveis = [PA 2024/25 (não deferido), proporcional (deferido)] =
+> 2 × 2 linhas ⇒ o #80-CX zera a linha 0 e mantém a 1. O #80-CY (estreitar
+> período) NÃO resolve este caso — a não deferida DIVIDE a data com a
+> deferida; o remédio é a inativação por índice. O abort do #80-CX agora
+> imprime (PA, data prevista) × datas da grade e avisa que as ocorrências
+> não deferidas ficam ATIVAS.
+>
+> Ordem da grade com datas iguais: a do PJC (PA mais antigo primeiro) — é o
+> pressuposto do #80-DF, confirmado neste PJC.
+>
+> Protegido por `test_inv159`.
+
+---
+
+## Regra obrigatória — Gate pós-PJC lê timestamps no fuso do PJE-Calc (#80-DT)
+
+> **O PJC grava as datas como meia-noite BRT em milissegundos; o container
+> roda em UTC.** `datetime.fromtimestamp()` devolvia 03:00 e a ocorrência do
+> 13º de 09/06/2026 — exatamente a deferida (7/12 de 2026) — caía FORA da
+> janela `01/01/2026–09/06/2026` (fim = 09/06/2026 00:00). O painel do
+> 0001065-93 acusava "13º a maior R$ 1.192,02" à toa.
+>
+> Fix em `_verificar_escopo_deferido_pjc` (`_ms`) e na guarda
+> `cartao_meses_zerados`: `fromtimestamp(ms/1000, tz=UTC−3).replace(tzinfo=None)`
+> — o mesmo que `learning/pjc_diff.py` já fazia. Protegido por `test_inv160`.
+
+---
+
 ## Regra obrigatória — Férias: linha = k-ésimo PA ELEGÍVEL (#80-CX/#80-DF)
 
 > **As ocorrências de férias de período aquisitivo NÃO deferido são zeradas
@@ -1257,13 +1308,58 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
-## Regra obrigatória — Súmula 340 base mista = DUAS verbas (#80-DK)
+## Regra obrigatória — Súmula 340: divisão SÓ com determinação EXPRESSA na sentença (#80-DR)
+
+> **Regra do usuário (16/09/2026, 0001065-93) — delimita o #80-DK abaixo:**
+> *"A melhoria implementada em relação à remuneração variável somente deve
+> ser usada quando a sentença expressamente determinar a utilização da Súmula
+> 340 do TST."* Ter **duas bases** (salário-base + adicional noturno, Súmula
+> 264) **NÃO é remuneração variável** — é UMA verba, hora cheia, com o
+> adicional em `bases_compostas`.
+>
+> **Bug (0001065-93, sessão 357eba81, 16/09/2026):** sentença com base
+> "salário-base + adicional noturno (Súmula 264)", silente quanto à 340. A IA
+> concluiu na Etapa 1 que a súmula não se aplicava e emitiu UMA verba com
+> `bases_compostas=[ADICIONAL NOTURNO]`, mult 1.5. O normalizer #80-DK
+> **dividiu assim mesmo** — o histórico ADICIONAL NOTURNO estava
+> `parcela=VARIAVEL` — gerando `HORAS EXTRAS 50% - TEMPO A - REMUNERAÇÃO
+> VARIÁVEL` e `INTERVALO INTRAJORNADA - REMUNERAÇÃO VARIÁVEL` (mult 0.5 sobre
+> o adicional noturno, divisor Hs Trabalhadas) e a fixa PERDEU o adicional da
+> base. PJC definitivo do calculista (CALCULO_278804): as duas removidas; o
+> ADICIONAL NOTURNO devolvido como histórico-base adicional (#80-DM) em HE,
+> INTERVALO, 13º e FÉRIAS.
+>
+> **Defesas (3 camadas):**
+> 1. **Prompt** (§4.4.sumula340.mista) — gatilho único: "SOMENTE quando a
+>    sentença determinar EXPRESSAMENTE a Súmula 340"; "Ter DUAS BASES não é
+>    remuneração variável"; `parcela=VARIAVEL` no histórico só p/ comissões/
+>    produção/peça/gorjeta — adicionais legais são FIXA. O antigo "mesmo que a
+>    sentença não cite" foi REVOGADO (`test_inv150` exige a ausência).
+> 2. **Normalizer** (`_norm_sumula_340_base_mista_duas_verbas`,
+>    `_menciona_sumula_340_expressa`): gate ANTES dos sinais. Fonte primária =
+>    `sentenca_texto` (novo kwarg de `normalize_v2_json`, passado pela Etapa 2
+>    via `_texto_sentenca_para_normalizer` — só o texto colado + o arquivo
+>    "sentença/decisão principal", nunca CCT/contracheque). Sem o texto, a
+>    menção na própria verba (`nome_pjecalc`/`nome_sentenca`/`comentarios`).
+>    Menção NEGADA numa janela de ±70 chars ("não se aplica", "não menciona",
+>    "sem aplicação", "afasta") não conta. Aceita OJ 397 SDI-1.
+> 3. **Bot** — inalterado (só aplica a prévia).
+>
+> Validado: o JSON real da IA (0001065-93) passa pelo normalizer com HE e
+> INTERVALO ÚNICOS, base SALÁRIO BASE + ADICIONAL NOTURNO, mult 1.5 — igual
+> ao definitivo. Protegido por `test_inv158` (+ `test_inv149/150` ajustados).
+> ⚠️ #80-CH (multiplicador só-adicional) NÃO foi alterado: continua a coagir
+> quando a base é SÓ variável com sinal textual (comissionista etc.).
+
+## Regra obrigatória — Súmula 340 base mista = DUAS verbas (#80-DK) — ver gate #80-DR
 
 > **Regra do usuário (15/09/2026, 0001156-86):** verba de **duração do
 > trabalho** (horas extras, adicional noturno, intervalos inter/intrajornada,
 > sobreaviso, in itinere) com remuneração **parte FIXA + parte VARIÁVEL** exige
-> **DUAS verbas**, uma por parcela, com indicação específica no nome — **mesmo
-> que a sentença não cite a Súmula 340**. Nunca multiplicador médio.
+> **DUAS verbas**, uma por parcela, com indicação específica no nome. Nunca
+> multiplicador médio. ~~mesmo que a sentença não cite a Súmula 340~~ —
+> **REVOGADO em 16/09/2026 (#80-DR): só com a Súmula 340 determinada
+> EXPRESSAMENTE na sentença.**
 >
 > **Bug (0001156-86, sessão b3d85551):** a IA emitiu UMA verba
 > `HORAS EXTRAS 50%` com `historico_nome=SALARIO BASE` +
