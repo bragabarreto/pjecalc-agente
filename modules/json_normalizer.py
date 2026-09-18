@@ -3266,6 +3266,49 @@ def normalize_v2_json(
         if len(novo) != len(_hist_atual):
             data["historico_salarial"] = novo
 
+    # 6.quater Evolução com MESES ZERADOS em parcela variável (#80-DU, 18/09/2026).
+    # Comissões/produção/gorjetas têm meses sem a parcela — a IA emitia
+    # `valor_brl: 0` na evolução e o schema rejeitava a prévia inteira
+    # ("evolucao[].valor_brl deve ser > 0", 3 sessões em produção). Aqui:
+    #  (a) degraus sem valor (None) são descartados;
+    #  (b) histórico com degrau 0 cujo NOME sinaliza parcela variável recebe
+    #      `parcela=VARIAVEL` (o schema admite 0 só nessa parcela);
+    #  (c) `valor_brl` base ≤ 0 → valor do PRIMEIRO degrau positivo (o bot seta
+    #      cada mês pela evolução; a base é só a semente do histórico no PJE-Calc).
+    import re as _re_zero
+    _SINAL_PARCELA_VARIAVEL = _re_zero.compile(
+        r"COMISS|GORJET|PRODU|PR[EÊ]MI|PE[CÇ]A|TAREF|VARI[AÁ]V", _re_zero.I
+    )
+    for _h in data.get("historico_salarial") or []:
+        if not isinstance(_h, dict):
+            continue
+        _ev = _h.get("evolucao")
+        if not isinstance(_ev, list) or not _ev:
+            continue
+        _ev = [s for s in _ev if isinstance(s, dict) and s.get("valor_brl") is not None]
+        _h["evolucao"] = _ev or None
+        if not _ev:
+            continue
+        _tem_zero = any(float(s.get("valor_brl") or 0) == 0 for s in _ev)
+        if (
+            _tem_zero
+            and str(_h.get("parcela") or "FIXA").upper() != "VARIAVEL"
+            and _SINAL_PARCELA_VARIAVEL.search(str(_h.get("nome") or ""))
+        ):
+            _h["parcela"] = "VARIAVEL"
+        _base = _h.get("valor_brl")
+        try:
+            _base_zero = _base is None or float(_base) <= 0
+        except (TypeError, ValueError):
+            _base_zero = True
+        if _base_zero:
+            _positivos = sorted(
+                (s for s in _ev if float(s["valor_brl"]) > 0),
+                key=lambda s: _competencia_a_int(s.get("competencia")) or 0,
+            )
+            if _positivos:
+                _h["valor_brl"] = float(_positivos[0]["valor_brl"])
+
     # 6.bis Férias — normalizar valor "VENCIDAS" (não existe no enum) para
     # "INDENIZADAS" preservando o flag `dobra`. No PJE-Calc, "vencidas" significa
     # período concessivo expirado sem usufruto → direito à dobra (art. 137 CLT).

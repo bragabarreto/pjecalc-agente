@@ -5555,3 +5555,57 @@ def test_inv160_gate_pos_pjc_timestamps_no_fuso_do_pjecalc():
     assert dt == _dtm.datetime(2026, 6, 9, 0, 0), dt
     assert _dtm.datetime(2026, 1, 1) <= dt <= _dtm.datetime(2026, 6, 9)
 
+
+
+def test_inv161_evolucao_admite_mes_zerado_em_parcela_variavel():
+    """#80-DU (18/09/2026): comissões/produção têm meses SEM a parcela. O
+    schema rejeitava `valor_brl: 0` na evolução para QUALQUER parcela e a
+    prévia inteira caía (3 sessões em produção: 357eba81, b48b9007, fa2f5f1f
+    — 'evolucao[].valor_brl deve ser > 0 (got 0.0)'). Agora: 0 admitido em
+    VARIAVEL; FIXA e negativo continuam rejeitados; o normalizer coage a
+    parcela por sinal no nome e garante base > 0."""
+    import modules.webapp_v2 as _w2
+    from modules.json_normalizer import normalize_v2_json
+
+    HS = _w2._pm.HistoricoSalarial
+    inc = {"fgts": True, "cs_inss": True}
+    base = {"nome": "COMISSÕES", "incidencias": inc, "competencia_inicial": "01/2025",
+            "competencia_final": "04/2025", "tipo_valor": "INFORMADO", "valor_brl": 244.4}
+    ev = [{"competencia": "01/2025", "valor_brl": 244.4},
+          {"competencia": "02/2025", "valor_brl": 0.0},
+          {"competencia": "03/2025", "valor_brl": 310.0}]
+
+    h = HS.model_validate({**base, "parcela": "VARIAVEL", "evolucao": ev})
+    assert h.evolucao[1].valor_brl == 0.0
+    with pytest.raises(Exception, match="parcela VARIAVEL"):
+        HS.model_validate({**base, "parcela": "FIXA", "evolucao": ev})
+    with pytest.raises(Exception, match=">= 0"):
+        HS.model_validate({**base, "parcela": "VARIAVEL",
+                           "evolucao": [{"competencia": "01/2025", "valor_brl": -5}]})
+
+    # normalizer: nome sinaliza parcela variável → VARIAVEL; base 0 → 1º degrau positivo;
+    # degrau sem valor descartado
+    res = normalize_v2_json({
+        "historico_salarial": [{**base, "parcela": "FIXA", "valor_brl": 0.0,
+                                "evolucao": [{"competencia": "01/2025", "valor_brl": 0.0},
+                                             {"competencia": "02/2025", "valor_brl": None},
+                                             {"competencia": "03/2025", "valor_brl": 310.0}]},
+                               {"nome": "SALARIO BASE", "parcela": "FIXA", "incidencias": inc,
+                                "competencia_inicial": "01/2025", "competencia_final": "04/2025",
+                                "tipo_valor": "INFORMADO", "valor_brl": 1500.0,
+                                "evolucao": [{"competencia": "01/2025", "valor_brl": 1500.0},
+                                             {"competencia": "03/2025", "valor_brl": 1600.0}]}],
+        "verbas_principais": [], "honorarios": [], "parametros_calculo": {},
+    })
+    com = next(x for x in res["historico_salarial"] if x["nome"] == "COMISSÕES")
+    assert com["parcela"] == "VARIAVEL"
+    assert com["valor_brl"] == 310.0
+    assert [s["valor_brl"] for s in com["evolucao"]] == [0.0, 310.0]
+    HS.model_validate(com)  # passa no schema após o normalizer
+    sal = next(x for x in res["historico_salarial"] if x["nome"] == "SALARIO BASE")
+    assert sal["parcela"] == "FIXA" and sal["valor_brl"] == 1500.0  # intocado
+
+    from modules.extraction_v2 import SYSTEM_PROMPT_V2_EXTERNAL
+    assert "Meses SEM a parcela variável = `valor_brl: 0`" in SYSTEM_PROMPT_V2_EXTERNAL
+    js = (REPO_ROOT / "templates" / "previa_v2.html").read_text(encoding="utf-8")
+    assert "const pos = ev.filter(e => e.valor_brl > 0);" in js

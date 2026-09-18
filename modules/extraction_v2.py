@@ -339,6 +339,14 @@ Tabela de decisão:
 | Salário base + adicional de insalubridade | 2 | cada uma pode ter `evolucao` |
 | Salário + comissão variável mensal | 2 (uma fixa, uma com `evolucao` mensal) | sim na 2ª |
 
+⚠️ **Meses SEM a parcela variável = `valor_brl: 0` na `evolucao`** (parcela
+`VARIAVEL` — comissões, produção, gorjetas): quando o contracheque de um mês
+não traz a parcela, emita `{"competencia": "MM/AAAA", "valor_brl": 0}`.
+NUNCA omita o mês (o valor anterior continuaria vigorando) nem invente um
+valor. O `valor_brl` base da entrada é o do PRIMEIRO mês com valor > 0.
+Zero só é admitido em parcela `VARIAVEL`; parcela `FIXA` (salário, adicionais
+legais) exige valor > 0 em todos os degraus.
+
 ---
 
 ⚠️ **REGRA INVARIANTE — NÃO REVERTER — salário mínimo = 1 entrada CALCULADO**:

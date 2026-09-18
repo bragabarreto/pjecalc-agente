@@ -245,6 +245,27 @@ playwright_pjecalc.py (Automação)
 > com valores evoluindo (PISO 1.727,26 em 2024, 1.827,96 em 01/2025). Protegido
 > por `test_inv15` (reescrito) + `test_inv47`.
 
+## Regra obrigatória — Evolução: mês ZERADO é dado real em parcela VARIAVEL (#80-DU)
+
+> **Comissões, produção e gorjetas têm meses SEM a parcela. `valor_brl: 0`
+> na `evolucao` é informação, não erro.** O schema exigia `> 0` para qualquer
+> parcela e a prévia inteira caía com `evolucao[].valor_brl deve ser > 0` —
+> em produção (18/09/2026) foi a causa de 3 das 4 falhas de Etapa 2 que o
+> revisor teve de colar de volta para a IA (ADICIONAL NOTURNO e COMISSÕES).
+>
+> **Regra (3 camadas):** schema (`HistoricoSalarial._check_tipo_valor`)
+> admite 0 **só em `parcela=VARIAVEL`** (negativo e FIXA=0 seguem rejeitados,
+> com mensagem que orienta); normalizer (passo 6.quater) descarta degraus
+> sem valor, coage `parcela=VARIAVEL` quando há degrau 0 e o nome sinaliza
+> parcela variável (COMISS/GORJET/PRODU/PRÊMI/PEÇA/TAREF/VARIÁV) e garante
+> `valor_brl` base = 1º degrau positivo (é só a semente do histórico; o bot
+> seta cada mês pela evolução — #80-L); prompt instrui a emitir o mês com 0
+> em vez de omiti-lo; a prévia (`_sincEvolucao`) usa a faixa mais antiga com
+> valor > 0 como base. Adicionais legais permanecem FIXA (#80-DR): um
+> ADICIONAL NOTURNO com meses 0 exige marcar VARIAVEL na prévia.
+>
+> Protegido por `test_inv161`.
+
 ---
 
 ## Regras obrigatórias — 5 fixes do caso THAÍS (0000183-68, 10/06/2026) — NÃO REVERTER

@@ -1674,8 +1674,12 @@ function _sincEvolucao(idx) {
   const ev = (h.evolucao || []).filter(e => e && e.competencia && e.valor_brl != null);
   if (!ev.length) return;
   const key = c => { const p = (c || '').split('/'); return (p[1] || '') + String(p[0] || '').padStart(2, '0'); };
-  let menor = ev[0];
-  for (const e of ev) if (key(e.competencia) < key(menor.competencia)) menor = e;
+  // #80-DU: parcela VARIAVEL admite meses com valor 0 — a base (semente do
+  // histórico no PJE-Calc) é a faixa mais antiga com valor > 0
+  const pos = ev.filter(e => e.valor_brl > 0);
+  const cand = pos.length ? pos : ev;
+  let menor = cand[0];
+  for (const e of cand) if (key(e.competencia) < key(menor.competencia)) menor = e;
   h.valor_brl = menor.valor_brl;
   if (!h.competencia_inicial) h.competencia_inicial = menor.competencia;
 }

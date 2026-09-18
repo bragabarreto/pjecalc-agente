@@ -318,9 +318,21 @@ class HistoricoSalarial(BaseModel):
                 "por competência via tabela (SM, piso). Use evolucao apenas com INFORMADO."
             )
         if self.evolucao:
+            # #80-DU (18/09/2026): mês SEM a parcela variável (comissão zero,
+            # produção zero) é dado REAL → valor 0 admitido em parcela VARIAVEL.
+            # Antes, ">0" para qualquer parcela rejeitava a prévia inteira
+            # (3 sessões em produção: ADICIONAL NOTURNO e COMISSÕES com meses 0).
+            # Parcela FIXA (salário, adicionais legais) continua exigindo > 0.
             for ev in self.evolucao:
-                if ev.valor_brl is None or ev.valor_brl <= 0:
-                    raise ValueError(f"evolucao[].valor_brl deve ser > 0 (got {ev.valor_brl})")
+                if ev.valor_brl is None or ev.valor_brl < 0:
+                    raise ValueError(f"evolucao[].valor_brl deve ser >= 0 (got {ev.valor_brl})")
+                if ev.valor_brl == 0 and self.parcela != TipoVariacaoParcela.VARIAVEL:
+                    raise ValueError(
+                        f"evolucao[] com valor 0 na competência {ev.competencia}: mês zerado "
+                        f"só é admitido em parcela VARIAVEL (comissões, produção, gorjetas — "
+                        f"mês sem a parcela). Em parcela FIXA informe o valor vigente, ou "
+                        f"marque parcela=VARIAVEL se a parcela realmente oscila."
+                    )
         return self
 
 
