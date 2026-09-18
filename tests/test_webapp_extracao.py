@@ -235,3 +235,155 @@ def test_previa_entra_na_lista_principal_desde_geracao():
     ext = (REPO_ROOT / "modules" / "webapp_extracao.py").read_text(encoding="utf-8")
     assert 'registrar_calculo_db(sessao_id, _previa_dump, status="previa_gerada")' in ext, (
         "Etapa 2 da extração deve registrar na geração")
+
+
+# ─── 18/09/2026 — erros em linguagem natural + documentos na correção ─────
+
+
+def test_traduzir_erro_validacao_nomeia_verba():
+    """ValidationError do Pydantic vira lista legível: a verba é citada pelo
+    NOME (não por índice/campo técnico) e não sobra URL do pydantic."""
+    from modules.webapp_extracao import _explicacao_deterministica, _traduzir_erro_validacao
+    from modules.webapp_v2 import PreviaCalculoV2
+
+    payload = {
+        "processo": {}, "parametros_calculo": {},
+        "verbas_principais": [{
+            "id": "v01", "nome_sentenca": "horas extras", "nome_pjecalc": "HORAS EXTRAS 50%",
+            "estrategia_preenchimento": "expresso_direto", "parametros": {},
+        }],
+    }
+    with pytest.raises(Exception) as ei:
+        PreviaCalculoV2.model_validate(payload)
+    trad = _traduzir_erro_validacao(ei.value, payload)
+    assert "Verba «HORAS EXTRAS 50%»" in trad
+    assert "requer expresso_alvo" in trad
+    assert "Dados do processo" in trad and "informação obrigatória ausente" in trad
+    assert "pydantic.dev" not in trad and "verbas_principais.0" not in trad
+    assert _explicacao_deterministica(ei.value, payload).startswith("O JSON gerado foi rejeitado")
+    # exceção não-Pydantic: cai na descrição humana, nunca em traceback
+    assert "erro de software" in _explicacao_deterministica(TypeError("unexpected keyword"), None)
+
+
+def test_descrever_excecao_em_linguagem_natural():
+    from modules.webapp_extracao import _descrever_excecao
+    assert "sobrecarregada" in _descrever_excecao(RuntimeError("Error code: 529 - overloaded_error"))
+    assert "erro de software" in _descrever_excecao(
+        TypeError("Messages.create() got an unexpected keyword argument 'temperature'"))
+
+
+def test_erro_etapa2_explicado_pela_ia_na_mesma_conversa(monkeypatch, client):
+    """JSON rejeitado pela validação → o sistema pergunta à IA (turnos `auto`)
+    o que falta e expõe `erro_explicacao` em linguagem natural; o bruto vai
+    em `erro_tecnico`; os turnos auto NÃO aparecem como 'correção enviada'."""
+    import modules.json_normalizer as jn
+    import modules.webapp_extracao as wx
+
+    sid = "teste-erro-etapa2"
+    wx._sessao_dir(sid)
+    wx._save_estado(sid, {
+        "fase": "resumo_pronto", "texto_colado": "SENTENÇA de teste.", "arquivos": [],
+        "resumo_md": "### resumo", "conversa": [{"role": "assistant", "texto": "### resumo"}],
+    })
+    json_ruim = json.dumps({
+        "processo": {}, "parametros_calculo": {},
+        "verbas_principais": [{"id": "v01", "nome_sentenca": "horas extras",
+                               "estrategia_preenchimento": "expresso_direto", "parametros": {}}],
+    })
+    chamadas: list[str] = []
+
+    def fake_chamar(messages, max_tokens):
+        ultimo = messages[-1]["content"]
+        ultimo = ultimo if isinstance(ultimo, str) else ultimo[-1]["text"]
+        chamadas.append(ultimo[:40])
+        if ultimo == "confirmar":
+            return json_ruim, {}
+        if "MENSAGEM AUTOMÁTICA" in ultimo:
+            assert "Verba «horas extras»" in ultimo  # a tradução vai junto no pedido
+            return "### O que deu errado\nFalta a base das horas extras.\n### O que preciso de você\n- contracheques", {}
+        raise AssertionError(f"chamada inesperada: {ultimo[:60]}")
+
+    monkeypatch.setattr(wx, "_chamar_claude", fake_chamar)
+    monkeypatch.setattr(jn, "normalize_v2_json", lambda p, **kw: p)
+    wx._worker_etapa2(sid)
+
+    est = wx._load_estado(sid)
+    assert est["fase"] == "erro_etapa2"
+    assert est["erro_explicacao"].startswith("### O que deu errado")
+    assert "ValidationError" in est["erro_tecnico"]
+    assert "rejeitado pela validação" in est["erro"]
+    autos = [t for t in est["conversa"] if t.get("auto")]
+    assert [t["role"] for t in autos] == ["user", "assistant"]
+    assert len(chamadas) == 2
+
+    d = client.get(f"/api/ia/{sid}/estado").json()
+    assert d["erro_explicacao"] == est["erro_explicacao"]
+    assert d["correcoes"] == []  # turnos auto e 'confirmar' não contam
+
+
+def test_corrigir_aceita_documentos_e_falha_nao_mata_sessao(client, tmp_path):
+    """Correção via multipart com anexo: o arquivo vira bloco do PRÓPRIO turno
+    (prefixo em cache intacto). Falha da API na correção NÃO derruba a sessão:
+    volta a `resumo_pronto` com aviso e o anexo fica pendente p/ reenvio."""
+    import modules.webapp_extracao as wx
+
+    import shutil
+    sid = "teste-corrigir-docs"
+    shutil.rmtree(wx._STORE_DIR / sid, ignore_errors=True)  # idempotente entre runs
+    wx._sessao_dir(sid)
+    wx._save_estado(sid, {
+        "fase": "resumo_pronto", "texto_colado": "SENTENÇA.", "arquivos": [],
+        "resumo_md": "### resumo", "conversa": [{"role": "assistant", "texto": "### resumo"}],
+    })
+    r = client.post(
+        f"/api/ia/{sid}/corrigir",
+        data={"correcoes": "o salário de 03/2024 é R$ 2.000", "doc_contexto_0": "contracheques 2024"},
+        files={"doc_arquivo_0": ("contracheque.txt", b"SALARIO 2000,00", "text/plain")},
+    )
+    assert r.status_code == 200 and r.json()["n_arquivos"] == 1
+
+    for _ in range(60):  # worker falha com a chave fake (401)
+        d = client.get(f"/api/ia/{sid}/estado").json()
+        if d["fase"] != "etapa1_processando":
+            break
+        time.sleep(0.5)
+    assert d["fase"] == "resumo_pronto", d
+    assert d["resumo_md"] == "### resumo"
+    assert "NÃO foi aplicada" in (d["aviso"] or "")
+    assert d["correcao_pendente"] == "o salário de 03/2024 é R$ 2.000"
+    assert d["erro"] is None
+
+    est = wx._load_estado(sid)
+    pend = est["correcao_pendente"]
+    assert len(pend["arquivos"]) == 1 and Path(pend["arquivos"][0]["caminho"]).is_file()
+    assert pend["arquivos"][0]["contexto"] == "contracheques 2024"
+    assert all(not t.get("arquivos") for t in est["conversa"])  # turno falho saiu do histórico
+
+    # o turno com anexo vira content-list: [bloco do documento..., texto]
+    est["conversa"].append(pend)
+    msgs = wx._montar_messages(est)
+    ult = msgs[-1]
+    assert ult["role"] == "user" and isinstance(ult["content"], list)
+    assert "=== DOCUMENTO: contracheque.txt (contracheques 2024) ===" in ult["content"][0]["text"]
+    assert "SALARIO 2000,00" in ult["content"][0]["text"]
+    assert ult["content"][-1]["text"].startswith("o salário de 03/2024")
+    assert "Anexei 1 documento" in ult["content"][-1]["text"]
+    assert msgs[0]["content"][-1].get("cache_control")  # prefixo em cache intocado
+
+    # JSON (forma original) continua aceito e reaproveita o anexo pendente
+    r2 = client.post(f"/api/ia/{sid}/corrigir", json={"correcoes": "de novo"})
+    assert r2.status_code == 200 and r2.json()["n_arquivos"] == 1
+
+    # a 2ª tentativa também falha (chave fake) → anexo volta a ficar pendente;
+    # com anexo pendente, correção SEM texto é aceita (reenvio só dos documentos)
+    for _ in range(60):
+        d = client.get(f"/api/ia/{sid}/estado").json()
+        if d["fase"] != "etapa1_processando":
+            break
+        time.sleep(0.5)
+    assert d["fase"] == "resumo_pronto" and d["correcao_pendente"] == "de novo"
+    est = wx._load_estado(sid)
+    est.pop("correcao_pendente")
+    wx._save_estado(sid, est)
+    # sem texto, sem documento e sem pendência → 400
+    assert client.post(f"/api/ia/{sid}/corrigir", json={"correcoes": ""}).status_code == 400

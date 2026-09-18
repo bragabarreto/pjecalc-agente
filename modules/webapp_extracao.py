@@ -21,6 +21,21 @@ com /previa_v3 (UI antiga da prévia v1).
 
 Regra IA-only: qualquer falha da API Anthropic → fase "erro" com mensagem
 clara. NUNCA gerar prévia por fallback regex.
+
+Correções com DOCUMENTOS (18/09/2026): o turno de correção aceita anexos
+(PDF, imagens, DOCX, MD/TXT, XLSX, texto colado) nos mesmos moldes do envio
+inicial. Os anexos entram como blocos de conteúdo do PRÓPRIO turno (não da
+1ª mensagem) — preserva o prefixo em cache e a IA recebe "correção + novos
+documentos" como uma coisa só.
+
+Erros em LINGUAGEM NATURAL (18/09/2026): a falha da Etapa 2 (JSON rejeitado
+pela validação Pydantic/normalizer) não é mais exibida como traceback. O
+sistema traduz o erro (`_explicacao_deterministica`) e pergunta à IA, na
+mesma conversa, o que está errado e QUAL informação/documento falta
+(`_explicar_erro_via_ia`). O texto bruto fica em `erro_tecnico` (colapsado
+na tela). Erros da API (crédito, sobrecarga, rede) viram frases claras via
+`_descrever_excecao`. Falha de uma correção NÃO mata mais a sessão: o resumo
+anterior continua válido (`aviso` + `correcao_pendente`).
 """
 
 from __future__ import annotations
@@ -247,7 +262,7 @@ def _texto_sentenca_para_normalizer(estado: dict) -> str | None:
         texto = (estado.get("texto_colado") or "").strip()
         if texto:
             partes.append(texto)
-        for meta in estado.get("arquivos", []) or []:
+        for meta in _todos_arquivos(estado):
             if "senten" not in str(meta.get("contexto") or "").lower():
                 continue
             if meta.get("tipo") == "imagem":
@@ -271,6 +286,13 @@ def _texto_sentenca_para_normalizer(estado: dict) -> str | None:
         logger.warning("texto da sentença p/ normalizer: %s", e)
     txt = "\n\n".join(t for t in partes if t and t.strip())
     return txt if txt.strip() else None
+
+
+def _todos_arquivos(estado: dict):
+    """Anexos do envio inicial + anexos de cada turno de correção."""
+    yield from (estado.get("arquivos") or [])
+    for t in estado.get("conversa") or []:
+        yield from (t.get("arquivos") or [])
 
 
 def _montar_conteudo_etapa1(estado: dict) -> list[dict]:
@@ -355,7 +377,24 @@ def _montar_messages(
                 blocos.append({"type": "text", "text": apr})
     msgs: list[dict] = [{"role": "user", "content": blocos}]
     for turno in estado.get("conversa", []):
-        msgs.append({"role": turno["role"], "content": turno["texto"]})
+        arqs = turno.get("arquivos") or []
+        if arqs and turno["role"] == "user":
+            # correção COM documentos: anexos no próprio turno (o prefixo da
+            # 1ª mensagem — e seu cache — não muda)
+            conteudo: list[dict] = []
+            for meta in arqs:
+                try:
+                    conteudo.extend(_arquivo_para_bloco(meta))
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"bloco de {meta.get('nome')}: {e}")
+                    conteudo.append({
+                        "type": "text",
+                        "text": f"(documento {meta.get('nome')} não pôde ser lido: {e})",
+                    })
+            conteudo.append({"type": "text", "text": turno["texto"]})
+            msgs.append({"role": "user", "content": conteudo})
+        else:
+            msgs.append({"role": turno["role"], "content": turno["texto"]})
     if nova_msg:
         msgs.append({"role": "user", "content": nova_msg})
     return msgs
@@ -409,6 +448,191 @@ def _extrair_json(texto: str) -> dict:
         raise
 
 
+# ─── Erros em linguagem natural ───────────────────────────────────────────
+
+
+def _eh_erro_api(e: Exception) -> bool:
+    try:
+        import anthropic as _a
+        return isinstance(e, _a.APIError)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _descrever_excecao(e: Exception) -> str:
+    """Erro da API/SDK em uma frase para o revisor (o bruto vai em `erro_tecnico`)."""
+    txt = str(e)
+    low = txt.lower()
+    try:
+        import anthropic as _a
+    except Exception:  # noqa: BLE001
+        _a = None
+    if _a is not None:
+        if isinstance(e, _a.AuthenticationError):
+            return "chave da API inválida ou ausente — verifique a configuração do servidor."
+        if isinstance(e, _a.RateLimitError):
+            return "limite de requisições da API atingido — aguarde alguns instantes e tente de novo."
+        if isinstance(e, _a.InternalServerError) or "overloaded" in low or "529" in low:
+            return "a API da Anthropic está sobrecarregada neste momento — tente de novo em instantes."
+        if isinstance(e, (_a.APITimeoutError, _a.APIConnectionError)):
+            return "falha de rede ao falar com a API — tente de novo em instantes."
+        if isinstance(e, _a.BadRequestError):
+            if "credit" in low or "billing" in low:
+                return "créditos da API esgotados — adicione fundos no Console da Anthropic."
+            if "too long" in low or "too many tokens" in low:
+                return ("o volume de sentença + documentos excede o limite da IA — remova os "
+                        "documentos menos relevantes ou envie só os trechos necessários.")
+            return f"a API recusou a requisição: {txt[:200]}"
+    if isinstance(e, (TypeError, AttributeError, ImportError)):
+        return ("erro de software (incompatibilidade da biblioteca da API), não de crédito — "
+                "avise o responsável técnico; repetir não resolve.")
+    return f"{type(e).__name__}: {txt[:300]}"
+
+
+_NOMES_SECAO = {
+    "processo": "Dados do processo",
+    "parametros_calculo": "Parâmetros do cálculo",
+    "historico_salarial": "Histórico salarial",
+    "verbas_principais": "Verba",
+    "reflexos": "Reflexo",
+    "cartao_de_ponto": "Cartão de ponto",
+    "cartoes_de_ponto": "Cartão de ponto",
+    "faltas": "Faltas",
+    "ferias": "Férias",
+    "fgts": "FGTS",
+    "contribuicao_social": "Contribuição social",
+    "imposto_de_renda": "Imposto de renda",
+    "honorarios": "Honorários",
+    "custas_judiciais": "Custas judiciais",
+    "correcao_juros_multa": "Correção monetária e juros",
+    "liquidacao": "Liquidação",
+    "multas_indenizacoes": "Multas e indenizações",
+}
+
+
+def _nome_item(ctx, secao: str, idx: int) -> str | None:
+    """Nome legível do item `secao[idx]` do payload (verba, histórico, reflexo…)."""
+    try:
+        item = ctx[secao][idx]
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(item, dict):
+        return None
+    for k in ("nome_pjecalc", "nome_sentenca", "expresso_alvo", "nome", "alvo", "tipo"):
+        v = item.get(k)
+        if v:
+            return str(v)
+    return None
+
+
+def _traduzir_erro_validacao(e: Exception, payload) -> str:
+    """ValidationError do Pydantic → lista markdown nomeando verba/seção pelo
+    NOME (não pelo índice/campo técnico). Vazio se `e` não for ValidationError."""
+    fn = getattr(e, "errors", None)
+    if not callable(fn):
+        return ""
+    try:
+        lista = fn()
+    except Exception:  # noqa: BLE001
+        return ""
+    linhas: list[str] = []
+    for err in list(lista)[:30]:
+        loc = list(err.get("loc") or ())
+        partes: list[str] = []
+        ctx = payload if isinstance(payload, dict) else None
+        i = 0
+        while i < len(loc):
+            p = loc[i]
+            if isinstance(p, int):
+                partes.append(f"item {p + 1}")
+                i += 1
+                continue
+            rotulo = _NOMES_SECAO.get(p, str(p).replace("_", " "))
+            if i + 1 < len(loc) and isinstance(loc[i + 1], int):
+                nome = _nome_item(ctx, p, loc[i + 1])
+                partes.append(f"{rotulo} «{nome}»" if nome else f"{rotulo} nº {loc[i + 1] + 1}")
+                try:
+                    ctx = ctx[p][loc[i + 1]]
+                except Exception:  # noqa: BLE001
+                    ctx = None
+                i += 2
+                continue
+            partes.append(rotulo)
+            ctx = ctx.get(p) if isinstance(ctx, dict) else None
+            i += 1
+        msg = str(err.get("msg") or "")
+        if msg.startswith("Value error, "):
+            msg = msg[len("Value error, "):]
+        tipo = str(err.get("type") or "")
+        if tipo == "missing":
+            msg = "informação obrigatória ausente"
+        elif tipo in ("literal_error", "enum"):
+            msg = f"valor não aceito «{err.get('input')}» — {msg}"
+        linhas.append(f"- **{' → '.join(partes) or 'documento'}**: {msg}")
+    return "\n".join(linhas)
+
+
+def _explicacao_deterministica(e: Exception, payload) -> str:
+    """Explicação SEM IA (fallback e insumo do pedido à IA)."""
+    if isinstance(e, json.JSONDecodeError):
+        return ("A resposta da IA não veio como JSON válido (provavelmente truncada ou "
+                "com texto fora do JSON). Clique em **Confirmar** novamente; se persistir, "
+                "reduza o volume de documentos anexados.")
+    trad = _traduzir_erro_validacao(e, payload)
+    if trad:
+        return ("O JSON gerado foi rejeitado pela validação do sistema nos pontos "
+                "abaixo:\n\n" + trad)
+    return f"Erro interno ao montar a prévia: {_descrever_excecao(e)}"
+
+
+_PROMPT_EXPLICAR_ERRO = """⚠️ MENSAGEM AUTOMÁTICA DO SISTEMA (não é do revisor humano).
+
+O JSON que você emitiu na Etapa 2 foi REJEITADO pela validação do sistema. Erro:
+
+```
+{erro}
+```
+
+Explique o problema em linguagem natural, em português, para um revisor humano
+(juiz/calculista) que NÃO lê código nem JSON. NÃO emita JSON agora. NÃO cite
+nomes de campos técnicos — nomeie a verba/seção como aparece na sentença.
+Estruture assim:
+
+### O que deu errado
+Uma frase por problema.
+
+### O que preciso de você
+Lista objetiva do que falta — a informação exata (ex.: "o valor do salário em
+março/2024", "a data exata da dispensa") ou o documento a anexar (ex.:
+"contracheques de 2023", "TRCT"). Se NÃO faltar nada e você puder corrigir
+sozinho, escreva exatamente: **Nenhuma informação adicional é necessária —
+posso corrigir sozinho.** e diga o que vai mudar.
+
+### Próximo passo
+Uma frase: enviar as informações/documentos pelo campo de correções (é
+possível anexar arquivos), ou clicar em "Confirmar" novamente."""
+
+
+def _explicar_erro_via_ia(estado: dict, erro: str) -> str | None:
+    """Pergunta à IA, na MESMA conversa (prefixo em cache), o que está errado e
+    qual informação/documento falta. Os dois turnos ficam marcados `auto=True`
+    (não aparecem como "correção enviada"), mas permanecem no histórico: na
+    próxima correção/confirmação a IA sabe o que foi rejeitado. Best-effort."""
+    pergunta = _PROMPT_EXPLICAR_ERRO.replace("{erro}", erro[:6000])
+    conv = estado.setdefault("conversa", [])
+    conv.append({"role": "user", "texto": pergunta, "auto": True})
+    try:
+        resp, usage = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA1)
+        estado.setdefault("usage", []).append({"etapa": "explicacao_erro", **usage})
+        conv.append({"role": "assistant", "texto": resp, "auto": True})
+        return resp.strip() or None
+    except Exception as e:  # noqa: BLE001
+        logger.warning("explicação do erro via IA falhou: %s", e)
+        if conv and conv[-1].get("auto") and conv[-1].get("role") == "user":
+            conv.pop()  # não deixar turno de usuário órfão no histórico
+        return None
+
+
 # ─── Workers em background (thread própria — chamadas longas à API) ───────
 
 
@@ -424,29 +648,52 @@ def _worker_etapa1(sessao_id: str) -> None:
     except Exception as e:
         logger.exception(f"[{sessao_id}] etapa 1 falhou")
         estado["fase"] = "erro"
-        estado["erro"] = f"Falha na extração via IA (Etapa 1): {e}"
+        estado["erro"] = f"Falha na extração via IA (Etapa 1): {_descrever_excecao(e)}"
+        estado["erro_tecnico"] = f"{type(e).__name__}: {e}"[:6000]
     _save_estado(sessao_id, estado)
 
 
-def _worker_correcao(sessao_id: str, correcoes: str) -> None:
+def _worker_correcao(sessao_id: str, turno: dict) -> None:
+    """`turno` = {"role": "user", "texto": ..., "arquivos": [meta...]?,
+    "texto_original": ...} montado em `corrigir_ia`."""
     estado = _load_estado(sessao_id) or {}
     try:
-        estado.setdefault("conversa", []).append({"role": "user", "texto": correcoes})
+        estado.setdefault("conversa", []).append(turno)
         _save_estado(sessao_id, estado)
         resumo, usage = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA1)
         estado.setdefault("usage", []).append({"etapa": "correcao", **usage})
         estado["conversa"].append({"role": "assistant", "texto": resumo})
         estado["resumo_md"] = resumo
         estado["fase"] = "resumo_pronto"
+        estado.pop("correcao_pendente", None)
     except Exception as e:
         logger.exception(f"[{sessao_id}] correção falhou")
-        estado["fase"] = "erro"
-        estado["erro"] = f"Falha ao aplicar correções via IA: {e}"
+        humano = _descrever_excecao(e)
+        estado["erro_tecnico"] = f"{type(e).__name__}: {e}"[:6000]
+        conv = estado.get("conversa") or []
+        if conv and conv[-1] is turno:
+            conv.pop()  # turno sem resposta não fica no histórico
+        if (estado.get("resumo_md") or "").strip():
+            # o resumo anterior continua válido — NÃO matar a sessão. O texto
+            # e os anexos da tentativa ficam guardados p/ reenvio automático.
+            estado["fase"] = "resumo_pronto"
+            estado["correcao_pendente"] = turno
+            estado["aviso"] = (
+                f"A correção NÃO foi aplicada: {humano} O resumo abaixo é o anterior. "
+                "Seu texto foi mantido no campo de correções"
+                + (f" e os {len(turno.get('arquivos') or [])} documento(s) anexado(s) "
+                   "serão reenviados automaticamente" if turno.get("arquivos") else "")
+                + " — clique em Refazer novamente."
+            )
+        else:
+            estado["fase"] = "erro"
+            estado["erro"] = f"Falha ao aplicar correções via IA: {humano}"
     _save_estado(sessao_id, estado)
 
 
 def _worker_etapa2(sessao_id: str) -> None:
     estado = _load_estado(sessao_id) or {}
+    payload = None
     try:
         estado.setdefault("conversa", []).append({"role": "user", "texto": "confirmar"})
         _save_estado(sessao_id, estado)
@@ -507,9 +754,23 @@ def _worker_etapa2(sessao_id: str) -> None:
         estado["url_previa"] = f"/previa/v2/{sessao_id}"
     except Exception as e:
         logger.exception(f"[{sessao_id}] etapa 2 falhou")
-        # volta para resumo_pronto: o usuário pode corrigir e tentar de novo
+        # o resumo continua válido: o usuário pode corrigir (com documentos)
+        # e confirmar de novo
         estado["fase"] = "erro_etapa2"
-        estado["erro"] = f"Falha na geração do JSON (Etapa 2): {e}"
+        estado["erro_tecnico"] = f"{type(e).__name__}: {e}"[:6000]
+        if _eh_erro_api(e):
+            estado["erro"] = f"Falha na geração do JSON (Etapa 2): {_descrever_excecao(e)}"
+            estado["erro_explicacao"] = None
+        else:
+            estado["erro"] = (
+                "O JSON gerado pela IA foi rejeitado pela validação do sistema. "
+                "Veja abaixo, em linguagem natural, o que está errado ou faltando."
+            )
+            det = _explicacao_deterministica(e, payload)
+            estado["erro_explicacao"] = (
+                _explicar_erro_via_ia(estado, f"{det}\n\n{estado['erro_tecnico'][:4000]}")
+                or det
+            )
     _save_estado(sessao_id, estado)
 
 
@@ -541,6 +802,68 @@ async def pagina_novo_ia(request: Request):
     return templates.TemplateResponse(request, "novo_calculo_ia.html", {})
 
 
+async def _salvar_upload(up, sdir: Path, idx: int, contexto: str, eh_imagem: bool) -> dict | None:
+    """Grava um upload em `<sessão>/files/` e devolve o meta (None se vazio/grande).
+    Imagens são redimensionadas (≤1536px) e convertidas p/ JPEG."""
+    dados = await up.read()
+    if not dados or len(dados) > _MAX_FILE_BYTES:
+        return None
+    nome = Path(up.filename).name
+    suf = Path(nome).suffix.lower()
+    meta: dict = {"nome": nome, "contexto": contexto}
+    if eh_imagem or suf in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
+        import io
+
+        from PIL import Image as _PIL
+
+        try:
+            img = _PIL.open(io.BytesIO(dados))
+            img.thumbnail((_IMG_MAX_PX, _IMG_MAX_PX), _PIL.Resampling.LANCZOS)
+            if img.mode == "RGBA":
+                img = img.convert("RGB")
+            buf = io.BytesIO()
+            fmt = "JPEG" if img.mode in ("RGB", "L") else "PNG"
+            img.save(buf, format=fmt, quality=85)
+            dados = buf.getvalue()
+            meta["mime_type"] = "image/jpeg" if fmt == "JPEG" else "image/png"
+        except Exception:
+            meta["mime_type"] = getattr(up, "content_type", "image/jpeg")
+        meta["tipo"] = "imagem"
+        path = sdir / "files" / f"{idx}_{Path(nome).stem}.jpg"
+    else:
+        meta["tipo"] = "arquivo"
+        path = sdir / "files" / f"{idx}_{nome}"
+    path.write_bytes(dados)
+    meta["caminho"] = str(path)
+    return meta
+
+
+async def _coletar_extras(form, sdir: Path, idx_base: int) -> tuple[list[dict], str]:
+    """Documentos extras do form (padrão doc_arquivo_N / doc_imagem_N /
+    doc_texto_N / doc_contexto_N — o mesmo do envio inicial e da correção).
+    Devolve (metas dos arquivos salvos, texto dos documentos colados)."""
+    arquivos: list[dict] = []
+    texto_extra = ""
+    for i in range(_MAX_EXTRAS):
+        ctx = str(form.get(f"doc_contexto_{i}", "")).strip()
+        arq = form.get(f"doc_arquivo_{i}")
+        img = form.get(f"doc_imagem_{i}")
+        txt = form.get(f"doc_texto_{i}")
+        meta = None
+        if arq is not None and hasattr(arq, "filename") and arq.filename:
+            meta = await _salvar_upload(arq, sdir, idx_base + i, ctx, eh_imagem=False)
+        elif img is not None and hasattr(img, "filename") and img.filename:
+            meta = await _salvar_upload(img, sdir, idx_base + i, ctx, eh_imagem=True)
+        elif txt and str(txt).strip():
+            texto_extra += (
+                f"\n\n=== DOCUMENTO COLADO{f' ({ctx})' if ctx else ''} ===\n"
+                + str(txt).strip()[:30000]
+            )
+        if meta:
+            arquivos.append(meta)
+    return arquivos, texto_extra
+
+
 @router_extracao.post("/processar/ia")
 async def processar_ia(request: Request):
     """Recebe sentença (texto colado e/ou arquivo) + extras; dispara Etapa 1."""
@@ -552,60 +875,16 @@ async def processar_ia(request: Request):
     texto_colado = str(form.get("texto_sentenca", "")).strip()
     arquivos: list[dict] = []
 
-    async def _salvar_upload(up, idx: int, contexto: str, eh_imagem: bool) -> None:
-        dados = await up.read()
-        if not dados or len(dados) > _MAX_FILE_BYTES:
-            return
-        nome = Path(up.filename).name
-        suf = Path(nome).suffix.lower()
-        meta: dict = {"nome": nome, "contexto": contexto}
-        if eh_imagem or suf in (".jpg", ".jpeg", ".png", ".webp", ".gif"):
-            import io
-
-            from PIL import Image as _PIL
-
-            try:
-                img = _PIL.open(io.BytesIO(dados))
-                img.thumbnail((_IMG_MAX_PX, _IMG_MAX_PX), _PIL.Resampling.LANCZOS)
-                if img.mode == "RGBA":
-                    img = img.convert("RGB")
-                buf = io.BytesIO()
-                fmt = "JPEG" if img.mode in ("RGB", "L") else "PNG"
-                img.save(buf, format=fmt, quality=85)
-                dados = buf.getvalue()
-                meta["mime_type"] = "image/jpeg" if fmt == "JPEG" else "image/png"
-            except Exception:
-                meta["mime_type"] = getattr(up, "content_type", "image/jpeg")
-            meta["tipo"] = "imagem"
-            path = sdir / "files" / f"{idx}_{Path(nome).stem}.jpg"
-        else:
-            meta["tipo"] = "arquivo"
-            path = sdir / "files" / f"{idx}_{nome}"
-        path.write_bytes(dados)
-        meta["caminho"] = str(path)
-        arquivos.append(meta)
-
     # sentença em arquivo (opcional — texto colado também vale)
     sent = form.get("arquivo_sentenca")
     if sent is not None and hasattr(sent, "filename") and sent.filename:
-        await _salvar_upload(sent, 0, "sentença/decisão principal", eh_imagem=False)
+        meta = await _salvar_upload(sent, sdir, 0, "sentença/decisão principal", eh_imagem=False)
+        if meta:
+            arquivos.append(meta)
 
-    # documentos extras (mesmo padrão do form v1: doc_arquivo_N / doc_imagem_N
-    # / doc_texto_N / doc_contexto_N)
-    for i in range(_MAX_EXTRAS):
-        ctx = str(form.get(f"doc_contexto_{i}", "")).strip()
-        arq = form.get(f"doc_arquivo_{i}")
-        img = form.get(f"doc_imagem_{i}")
-        txt = form.get(f"doc_texto_{i}")
-        if arq is not None and hasattr(arq, "filename") and arq.filename:
-            await _salvar_upload(arq, i + 1, ctx, eh_imagem=False)
-        elif img is not None and hasattr(img, "filename") and img.filename:
-            await _salvar_upload(img, i + 1, ctx, eh_imagem=True)
-        elif txt and str(txt).strip():
-            texto_colado += (
-                f"\n\n=== DOCUMENTO COLADO{f' ({ctx})' if ctx else ''} ===\n"
-                + str(txt).strip()[:30000]
-            )
+    extras, texto_extra = await _coletar_extras(form, sdir, 1)
+    arquivos.extend(extras)
+    texto_colado += texto_extra
 
     if not texto_colado and not arquivos:
         return JSONResponse(
@@ -645,36 +924,85 @@ async def estado_ia(sessao_id: str):
     estado = _load_estado(sessao_id)
     if estado is None:
         return JSONResponse({"fase": "nao_encontrada"}, status_code=404)
+    # histórico de correções já enviadas (para exibir na tela) — turnos
+    # `auto` (pedido de explicação de erro) e "confirmar" não contam
+    correcoes: list[str] = []
+    for t in estado.get("conversa", []):
+        if t.get("role") != "user" or t.get("auto") or t.get("texto") == "confirmar":
+            continue
+        s = t.get("texto_original") or t.get("texto") or ""
+        n = len(t.get("arquivos") or [])
+        if n:
+            s = f"📎 {n} documento(s) — {s}"
+        correcoes.append(s)
+    pend = estado.get("correcao_pendente") or {}
     return JSONResponse({
         "fase": estado.get("fase"),
         "resumo_md": estado.get("resumo_md"),
         "erro": estado.get("erro"),
+        "erro_tecnico": estado.get("erro_tecnico"),
+        "erro_explicacao": estado.get("erro_explicacao"),
+        "aviso": estado.get("aviso") or estado.get("aviso_recuperacao"),
+        "correcao_pendente": pend.get("texto_original") or pend.get("texto"),
         "url_previa": estado.get("url_previa"),
-        "n_arquivos": len(estado.get("arquivos", [])),
+        "n_arquivos": sum(1 for _ in _todos_arquivos(estado)),
         "usage": estado.get("usage", []),
-        # histórico de correções já enviadas (para exibir na tela)
-        "correcoes": [
-            t["texto"] for t in estado.get("conversa", [])
-            if t["role"] == "user" and t["texto"] != "confirmar"
-        ],
+        "correcoes": correcoes,
     })
 
 
 @router_extracao.post("/api/ia/{sessao_id}/corrigir")
-async def corrigir_ia(sessao_id: str, payload: dict):
+async def corrigir_ia(sessao_id: str, request: Request):
+    """Correção do resumo: texto E/OU documentos novos.
+
+    Aceita JSON `{"correcoes": "..."}` (forma original) ou multipart com
+    `correcoes` + `doc_arquivo_N`/`doc_imagem_N`/`doc_texto_N`/`doc_contexto_N`
+    (mesmo padrão do envio inicial). Os anexos viram blocos do PRÓPRIO turno.
+    """
     estado = _load_estado(sessao_id)
     if estado is None:
         return JSONResponse({"erro": "sessão não encontrada"}, status_code=404)
-    correcoes = str(payload.get("correcoes", "")).strip()
-    if not correcoes:
-        return JSONResponse({"erro": "descreva as correções"}, status_code=400)
     if estado.get("fase") not in ("resumo_pronto", "erro_etapa2"):
         return JSONResponse({"erro": f"fase atual: {estado.get('fase')}"}, status_code=409)
+
+    arquivos: list[dict] = []
+    if "multipart/form-data" in (request.headers.get("content-type") or ""):
+        form = await request.form()
+        correcoes = str(form.get("correcoes", "")).strip()
+        sdir = _sessao_dir(sessao_id)
+        idx_base = 1 + sum(1 for _ in (sdir / "files").iterdir())
+        arquivos, texto_extra = await _coletar_extras(form, sdir, idx_base)
+        correcoes += texto_extra
+    else:
+        payload = await request.json()
+        correcoes = str((payload or {}).get("correcoes", "")).strip()
+
+    # anexos de uma tentativa anterior que falhou (API fora do ar etc.)
+    pend = estado.pop("correcao_pendente", None) or {}
+    arquivos = list(pend.get("arquivos") or []) + arquivos
+
+    if not correcoes and not arquivos:
+        return JSONResponse(
+            {"erro": "descreva as correções ou anexe ao menos um documento"},
+            status_code=400,
+        )
+    texto = correcoes or "Seguem documentos adicionais do processo."
+    if arquivos:
+        texto += (
+            f"\n\n(Anexei {len(arquivos)} documento(s) adicional(is) nesta mensagem. "
+            "Refaça a ETAPA 1 integrando as informações deles e as correções acima. "
+            "NÃO gere o JSON ainda.)"
+        )
+    turno: dict = {"role": "user", "texto": texto, "texto_original": correcoes}
+    if arquivos:
+        turno["arquivos"] = arquivos
+
     estado["fase"] = "etapa1_processando"
-    estado.pop("erro", None)
+    for k in ("erro", "erro_tecnico", "erro_explicacao", "aviso", "aviso_recuperacao"):
+        estado.pop(k, None)
     _save_estado(sessao_id, estado)
-    _disparar(_worker_correcao, sessao_id, correcoes)
-    return JSONResponse({"status": "processando"})
+    _disparar(_worker_correcao, sessao_id, turno)
+    return JSONResponse({"status": "processando", "n_arquivos": len(arquivos)})
 
 
 @router_extracao.post("/api/ia/{sessao_id}/confirmar")
@@ -685,7 +1013,8 @@ async def confirmar_ia(sessao_id: str):
     if estado.get("fase") not in ("resumo_pronto", "erro_etapa2"):
         return JSONResponse({"erro": f"fase atual: {estado.get('fase')}"}, status_code=409)
     estado["fase"] = "etapa2_processando"
-    estado.pop("erro", None)
+    for k in ("erro", "erro_tecnico", "erro_explicacao", "aviso", "aviso_recuperacao"):
+        estado.pop(k, None)
     _save_estado(sessao_id, estado)
     _disparar(_worker_etapa2, sessao_id)
     return JSONResponse({"status": "processando"})
