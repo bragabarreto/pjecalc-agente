@@ -1774,10 +1774,10 @@ python main.py --sessao <UUID>
 git push origin main
 
 # Manual deploy
-./deploy/oracle-cloud/deploy.sh 147.15.26.201 ~/Downloads/ssh-key-2026-03-31.key
+./deploy/oracle-cloud/deploy.sh 147.15.26.201 ~/.ssh/oracle-pjecalc.pem
 
 # SSH into VM
-ssh -i ~/Downloads/ssh-key-2026-03-31.key opc@147.15.26.201
+ssh -i ~/.ssh/oracle-pjecalc.pem opc@147.15.26.201
 
 # Production URL
 http://147.15.26.201:8000
