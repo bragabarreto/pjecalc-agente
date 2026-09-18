@@ -344,8 +344,10 @@ Tabela de decisão:
 não traz a parcela, emita `{"competencia": "MM/AAAA", "valor_brl": 0}`.
 NUNCA omita o mês (o valor anterior continuaria vigorando) nem invente um
 valor. O `valor_brl` base da entrada é o do PRIMEIRO mês com valor > 0.
-Zero só é admitido em parcela `VARIAVEL`; parcela `FIXA` (salário, adicionais
-legais) exige valor > 0 em todos os degraus.
+O mesmo vale para **adicionais legais** (noturno, insalubridade,
+periculosidade, transferência — parcela `FIXA`): mês sem trabalho noturno /
+sem exposição = `valor_brl: 0`. Só o SALÁRIO (base, piso) exige valor > 0 em
+todos os degraus.
 
 ---
 

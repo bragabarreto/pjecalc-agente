@@ -254,15 +254,18 @@ playwright_pjecalc.py (Automação)
 > revisor teve de colar de volta para a IA (ADICIONAL NOTURNO e COMISSÕES).
 >
 > **Regra (3 camadas):** schema (`HistoricoSalarial._check_tipo_valor`)
-> admite 0 **só em `parcela=VARIAVEL`** (negativo e FIXA=0 seguem rejeitados,
-> com mensagem que orienta); normalizer (passo 6.quater) descarta degraus
+> admite 0 em **`parcela=VARIAVEL`** e em **adicional legal** pelo nome
+> (`_ADICIONAL_LEGAL_RE`: ADICION/NOTURN/INSALUBR/PERICUL/TRANSFER/SOBREAVISO/
+> PRONTID — parcela FIXA por natureza, #80-DR, mas com meses sem a parcela);
+> negativo e salário com 0 seguem rejeitados, com mensagem que orienta;
+> normalizer (passo 6.quater) descarta degraus
 > sem valor, coage `parcela=VARIAVEL` quando há degrau 0 e o nome sinaliza
 > parcela variável (COMISS/GORJET/PRODU/PRÊMI/PEÇA/TAREF/VARIÁV) e garante
 > `valor_brl` base = 1º degrau positivo (é só a semente do histórico; o bot
 > seta cada mês pela evolução — #80-L); prompt instrui a emitir o mês com 0
 > em vez de omiti-lo; a prévia (`_sincEvolucao`) usa a faixa mais antiga com
-> valor > 0 como base. Adicionais legais permanecem FIXA (#80-DR): um
-> ADICIONAL NOTURNO com meses 0 exige marcar VARIAVEL na prévia.
+> valor > 0 como base. Adicionais legais permanecem FIXA (#80-DR) e ainda
+> assim aceitam meses 0 (regra do usuário, 18/09/2026).
 >
 > Protegido por `test_inv161`.
 

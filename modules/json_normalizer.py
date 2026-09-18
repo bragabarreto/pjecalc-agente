@@ -3272,7 +3272,8 @@ def normalize_v2_json(
     # ("evolucao[].valor_brl deve ser > 0", 3 sessões em produção). Aqui:
     #  (a) degraus sem valor (None) são descartados;
     #  (b) histórico com degrau 0 cujo NOME sinaliza parcela variável recebe
-    #      `parcela=VARIAVEL` (o schema admite 0 só nessa parcela);
+    #      `parcela=VARIAVEL`; adicionais legais (noturno, insalubridade…)
+    #      ficam FIXA — o schema admite 0 neles pelo nome (#80-DR);
     #  (c) `valor_brl` base ≤ 0 → valor do PRIMEIRO degrau positivo (o bot seta
     #      cada mês pela evolução; a base é só a semente do histórico no PJE-Calc).
     import re as _re_zero

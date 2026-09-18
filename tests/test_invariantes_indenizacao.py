@@ -5577,8 +5577,13 @@ def test_inv161_evolucao_admite_mes_zerado_em_parcela_variavel():
 
     h = HS.model_validate({**base, "parcela": "VARIAVEL", "evolucao": ev})
     assert h.evolucao[1].valor_brl == 0.0
+    # salário (parcela FIXA) com mês 0 → rejeitado
     with pytest.raises(Exception, match="parcela VARIAVEL"):
-        HS.model_validate({**base, "parcela": "FIXA", "evolucao": ev})
+        HS.model_validate({**base, "nome": "SALARIO BASE", "parcela": "FIXA", "evolucao": ev})
+    # adicional LEGAL (FIXA por natureza, #80-DR) com mês 0 → aceito pelo nome
+    for nome in ("ADICIONAL NOTURNO", "ADICIONAL DE INSALUBRIDADE", "PERICULOSIDADE"):
+        hn = HS.model_validate({**base, "nome": nome, "parcela": "FIXA", "evolucao": ev})
+        assert hn.parcela.value == "FIXA" and hn.evolucao[1].valor_brl == 0.0
     with pytest.raises(Exception, match=">= 0"):
         HS.model_validate({**base, "parcela": "VARIAVEL",
                            "evolucao": [{"competencia": "01/2025", "valor_brl": -5}]})

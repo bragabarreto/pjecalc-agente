@@ -12,6 +12,7 @@ Para usar:
 """
 from __future__ import annotations
 
+import re as _re
 from datetime import datetime
 from enum import Enum
 from typing import Literal, Optional, Union
@@ -289,6 +290,14 @@ class EvolucaoValor(BaseModel):
     valor_brl: float  # novo valor em reais
 
 
+# #80-DU: adicionais LEGAIS (parcela FIXA por natureza — #80-DR) também têm
+# meses sem a parcela (mês sem trabalho noturno, sem exposição ao agente).
+# Mês zerado é dado real neles; só o SALÁRIO propriamente dito exige > 0.
+_ADICIONAL_LEGAL_RE = _re.compile(
+    r"ADICION|NOTURN|INSALUBR|PERICUL|TRANSFER|SOBREAVISO|PRONTID", _re.I
+)
+
+
 class HistoricoSalarial(BaseModel):
     nome: str
     parcela: TipoVariacaoParcela = TipoVariacaoParcela.FIXA
@@ -323,14 +332,19 @@ class HistoricoSalarial(BaseModel):
             # Antes, ">0" para qualquer parcela rejeitava a prévia inteira
             # (3 sessões em produção: ADICIONAL NOTURNO e COMISSÕES com meses 0).
             # Parcela FIXA (salário, adicionais legais) continua exigindo > 0.
+            admite_zero = (
+                self.parcela == TipoVariacaoParcela.VARIAVEL
+                or bool(_ADICIONAL_LEGAL_RE.search(self.nome or ""))
+            )
             for ev in self.evolucao:
                 if ev.valor_brl is None or ev.valor_brl < 0:
                     raise ValueError(f"evolucao[].valor_brl deve ser >= 0 (got {ev.valor_brl})")
-                if ev.valor_brl == 0 and self.parcela != TipoVariacaoParcela.VARIAVEL:
+                if ev.valor_brl == 0 and not admite_zero:
                     raise ValueError(
                         f"evolucao[] com valor 0 na competência {ev.competencia}: mês zerado "
-                        f"só é admitido em parcela VARIAVEL (comissões, produção, gorjetas — "
-                        f"mês sem a parcela). Em parcela FIXA informe o valor vigente, ou "
+                        f"só é admitido em parcela VARIAVEL (comissões, produção, gorjetas) "
+                        f"ou em adicional legal (noturno, insalubridade, periculosidade…) — "
+                        f"mês sem a parcela. Para o salário informe o valor vigente, ou "
                         f"marque parcela=VARIAVEL se a parcela realmente oscila."
                     )
         return self
