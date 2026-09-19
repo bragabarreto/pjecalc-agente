@@ -5614,3 +5614,29 @@ def test_inv161_evolucao_admite_mes_zerado_em_parcela_variavel():
     assert "Meses SEM a parcela variável = `valor_brl: 0`" in SYSTEM_PROMPT_V2_EXTERNAL
     js = (REPO_ROOT / "templates" / "previa_v2.html").read_text(encoding="utf-8")
     assert "const pos = ev.filter(e => e.valor_brl > 0);" in js
+
+
+def test_inv162_previa_aceita_verbas_principais_vazias():
+    """#80-DV (0000050-89 JOSE WILSON, 19/09/2026): a condenação era SÓ FGTS +
+    multa de 40% (seção FGTS, com saldo do extrato a deduzir) e a IA emitiu
+    corretamente `verbas_principais: []`. O validarPrevia() do template
+    acusava "Verbas Principais: ao menos 1 verba deferida" e DESABILITAVA o
+    Confirmar — o revisor foi forçado a inventar um SALDO DE SALÁRIO não
+    condenado só para liberar a automação, e a verba espúria foi parar no
+    PJC. O PJE-Calc liquida sem verba alguma; schema (`default_factory=list`)
+    e bot (`fase_verbas` pula com "Sem verbas principais") já aceitavam a
+    lista vazia. O JS deve espelhar o backend."""
+    tpl = (REPO_ROOT / "templates" / "previa_v2.html").read_text(encoding="utf-8")
+    corpo = tpl.split("async function validarPrevia")[1].split("async function confirmarPreviaV2")[0]
+    assert "ao menos 1 verba" not in corpo, (
+        "REGRESSÃO #80-DV: validarPrevia voltou a exigir verba principal — "
+        "condenação só de FGTS/multa 40% fica bloqueada na prévia")
+    assert "verbas_principais.length === 0" not in corpo, (
+        "REGRESSÃO #80-DV: bloqueio por verbas_principais vazia reintroduzido")
+    # Backend continua tolerante (fontes espelhadas)
+    sch = (REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py").read_text(encoding="utf-8")
+    assert "verbas_principais: list[VerbaPrincipal] = Field(default_factory=list)" in sch, (
+        "REGRESSÃO #80-DV: schema passou a exigir verbas_principais")
+    bot = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "Sem verbas principais — pulando" in bot, (
+        "REGRESSÃO #80-DV: fase_verbas deixou de pular a lista vazia")

@@ -245,6 +245,26 @@ playwright_pjecalc.py (Automação)
 > com valores evoluindo (PISO 1.727,26 em 2024, 1.827,96 em 01/2025). Protegido
 > por `test_inv15` (reescrito) + `test_inv47`.
 
+## Regra obrigatória — Condenação SÓ de FGTS: `verbas_principais` VAZIA é válida (#80-DV)
+
+> **A prévia NÃO pode exigir "ao menos 1 verba principal".** A condenação pode
+> ser apenas de FGTS, ou FGTS + multa de 40% — tudo lançado na seção FGTS
+> (`fgts.tipo_verba`, `fgts.multa`, `saldos_a_deduzir`). O PJE-Calc liquida
+> sem verba alguma.
+>
+> **0000050-89 (JOSE WILSON, 19/09/2026):** dispositivo condena só FGTS de
+> 12/2025 e 01/2026 + multa de 40%. A IA emitiu corretamente
+> `verbas_principais: []`; o `validarPrevia()` do template bloqueava o
+> Confirmar com "Verbas Principais: ao menos 1 verba deferida" e o revisor
+> teve de inventar um SALDO DE SALÁRIO não condenado, que foi parar no PJC.
+>
+> Todo o resto já aceitava a lista vazia: schema (`default_factory=list`),
+> normalizer, `fase_verbas` ("Sem verbas principais — pulando") e a guarda
+> anti-PJC-fantasma (só age com verbas esperadas > 0). Trava removida do
+> template. Protegido por `test_inv162`.
+
+---
+
 ## Regra obrigatória — Evolução: mês ZERADO é dado real em parcela VARIAVEL (#80-DU)
 
 > **Comissões, produção e gorjetas têm meses SEM a parcela. `valor_brl: 0`

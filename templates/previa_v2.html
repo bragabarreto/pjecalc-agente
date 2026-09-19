@@ -2559,9 +2559,11 @@ async function validarPrevia() {
   if (!previaData.historico_salarial || previaData.historico_salarial.length === 0) {
     erros.push('Histórico Salarial: ao menos 1 entrada');
   }
-  if (!previaData.verbas_principais || previaData.verbas_principais.length === 0) {
-    erros.push('Verbas Principais: ao menos 1 verba deferida');
-  }
+  // #80-DV (0000050-89, 19/09/2026): verbas_principais VAZIA é válida — a
+  // condenação pode ser só de FGTS (ou FGTS + multa de 40%), lançada na
+  // seção FGTS. O PJE-Calc liquida sem verba alguma; o bot pula a Fase 4.
+  // Exigir uma verba mínima forçava o revisor a inventar uma verba não
+  // condenada (SALDO DE SALÁRIO) só para liberar o Confirmar. NÃO reintroduzir.
   (previaData.verbas_principais || []).forEach((v, idx) => {
     const p = v.parametros || {};
     const nome = v.nome_pjecalc || v.nome_sentenca || '?';
