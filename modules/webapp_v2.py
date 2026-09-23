@@ -521,7 +521,15 @@ button {{ padding: 6px 12px; font-size: 0.9rem; cursor: pointer; }}
 const logs = document.getElementById('logs');
 const status = document.getElementById('status');
 const downloadArea = document.getElementById('download-area');
-const es = new EventSource('/api/executar/v2/{sessao_id}{_rerun_qs}');
+// #80-DW: o EventSource NUNCA reconecta sozinho com ?rerun=1 — o rerun é
+// consumido UMA vez (a URL da página perde o parâmetro) e toda reconexão
+// vai para a URL plana, que apenas SEGUE um run em andamento ou informa que
+// a execução anterior foi interrompida (nunca reinicia por conta própria).
+const SSE_URL = '/api/executar/v2/{sessao_id}';
+let es = new EventSource(SSE_URL + '{_rerun_qs}');
+if ('{_rerun_qs}') {{ try {{ history.replaceState(null, '', '/instrucoes/v2/{sessao_id}'); }} catch(_) {{}} }}
+let reconexoes = 0;
+function ligarSSE(es) {{
 es.onmessage = (e) => {{
   let txt = e.data;
   try {{ const j = JSON.parse(txt); txt = j.msg || txt; }} catch(_) {{}}
@@ -554,7 +562,14 @@ es.onmessage = (e) => {{
     es.close();
   }}
 }};
-es.onerror = () => {{ status.textContent = '⚠ desconectado'; status.className = 'status error'; }};
+es.onerror = () => {{
+  es.close();  // desliga a reconexão nativa (ela repetiria a URL original, inclusive ?rerun=1)
+  if (reconexoes++ >= 20) {{ status.textContent = '⚠ desconectado — clique ↻ Reconectar'; status.className = 'status error'; return; }}
+  status.textContent = '⚠ desconectado — reconectando…'; status.className = 'status error';
+  setTimeout(() => {{ es = new EventSource(SSE_URL); ligarSSE(es); }}, 3000);
+}};
+}}
+ligarSSE(es);
 
 function escapeHtml(s) {{ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }}
 function escapeAttr(s) {{ return escapeHtml(s).replace(/"/g,'&quot;'); }}
@@ -853,6 +868,22 @@ async def confirmar_previa(sessao_id: str, payload: dict):
 
 
 # ─── Generator que roda PlaywrightAutomatorV2 e yields logs ───────────────
+
+
+def ja_houve_execucao_v2(sessao_id: str) -> bool:
+    """#80-DW: já existe log persistido de automação desta sessão?
+
+    O arquivo <store>/logs/<sessao>_automation.log nasce na PRIMEIRA linha de
+    cada run (ver executar_v2_como_generator). Sem runner em memória e sem PJC
+    no DB, a existência do log significa execução INTERROMPIDA — o endpoint
+    SSE não a retoma sozinho; exige ▶ Re-executar (?rerun=1).
+    """
+    try:
+        if _STORE_DIR is None:
+            return False
+        return (Path(_STORE_DIR) / "logs" / f"{sessao_id}_automation.log").exists()
+    except Exception:
+        return False
 
 
 def executar_v2_como_generator(sessao_id: str):

@@ -265,6 +265,36 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regra obrigatória — Reconexão do SSE NUNCA reinicia a automação (#80-DW)
+
+> **Regra do usuário (23/09/2026):** *"exija o clique em Re-executar em vez de
+> reiniciar sozinho."*
+>
+> **0001312-74 (23/09/2026):** o deploy reiniciou o container no meio de um
+> run; o EventSource da aba aberta reconectou em `/api/executar/v2/<sessao>`,
+> não achou runner nem PJC e **disparou um run novo por conta própria** — com a
+> prévia gravada naquele instante (ainda com a verba espúria) — gerando um PJC
+> inválido que ninguém pediu.
+>
+> **Fix (2 camadas):**
+> 1. **Endpoint** (`webapp.py`, `executar_automacao_v2_sse`): sem runner em
+>    memória, sem PJC e **com log persistido** de execução anterior
+>    (`ja_houve_execucao_v2` → `<store>/logs/<sessao>_automation.log`) ⇒ apenas
+>    informa "execução INTERROMPIDA… clique ▶ Re-executar" e encerra. Só
+>    `?rerun=1` refaz. A **1ª execução** pós-confirmação (sem log) continua
+>    iniciando normalmente.
+> 2. **Página** (`instrucoes_v2`): o `?rerun=1` é consumido UMA vez
+>    (`history.replaceState` remove-o da URL) e o `onerror` **desliga a
+>    reconexão nativa** (que repetiria a URL original, inclusive `?rerun=1`) e
+>    reconecta na URL plana — que só SEGUE um run em andamento.
+>
+> Para reexecutar após um run concluído com PJC: `POST /api/reset-lock/<sessao>`
+> (remove o runner em cache) + `/instrucoes/v2/<sessao>?rerun=1`.
+>
+> Protegido por `tests/test_reexecucao_exige_clique.py` (4 testes).
+
+---
+
 ## Regra obrigatória — Evolução: mês ZERADO é dado real em parcela VARIAVEL (#80-DU)
 
 > **Comissões, produção e gorjetas têm meses SEM a parcela. `valor_brl: 0`

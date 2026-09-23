@@ -4320,6 +4320,23 @@ async def executar_automacao_v2_sse(sessao_id: str, request: Request, rerun: boo
             finally:
                 _dbg.close()
 
+            # #80-DW (0001312-74, 23/09/2026): reconexão do EventSource NÃO
+            # reinicia a automação sozinha. Após o restart do container (deploy)
+            # o runner some da memória; o EventSource da aba aberta reconecta
+            # e, sem PJC no DB, caía aqui e disparava um run NOVO por conta
+            # própria — com a prévia que estivesse gravada no momento (no caso,
+            # ainda com a verba espúria). O log persistido
+            # (<store>/logs/<sessao>_automation.log) prova que já houve
+            # execução: sem runner e sem PJC, ela foi INTERROMPIDA. Só o clique
+            # em ▶ Re-executar (?rerun=1) refaz o cálculo. Primeira execução
+            # (sem log) continua iniciando normalmente após a confirmação.
+            from modules.webapp_v2 import ja_houve_execucao_v2
+            if ja_houve_execucao_v2(sessao_id):
+                yield f"data: {json.dumps({'msg': '⚠ A execução anterior desta sessão foi INTERROMPIDA (servidor reiniciado ou automação encerrada sem PJC) e NÃO será retomada automaticamente.'})}\n\n"
+                yield f"data: {json.dumps({'msg': 'ℹ Revise a prévia se necessário e clique em ▶ Re-executar para refazer o cálculo do zero.'})}\n\n"
+                yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+                return
+
         # Nenhum runner existente — iniciar nova automação
         try:
             gen = executar_v2_como_generator(sessao_id)
