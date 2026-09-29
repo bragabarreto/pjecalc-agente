@@ -265,6 +265,36 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regra obrigatória — Click no sidebar espera o NOVO documento (#80-DX)
+
+> **`_navegar_menu_via_click` só devolve o controle depois que o documento
+> novo COMITA.** `_aguardar_ajax` (networkidle) volta NA HORA após um click
+> A4J — o load state do documento antigo já foi atingido — e
+> `verba-calculo.jsf` tem ~1,2 MB: o Firefox da VM leva segundos trocando de
+> página. O click seguinte caía no documento ANTIGO e era descartado.
+>
+> **0000348-36 (PATRICK, 29/09/2026) — cálculo sem PJC.** Access log do
+> Tomcat: `GET verba-calculo.jsf` e, 2s depois, o Liquidar postado de novo por
+> `principal.jsf`/`calculo.jsf` (inerte) — em todas as 3 tentativas e no
+> Recentes. O onclick-exec CHEGOU a abrir `liquidacao.jsf` (10:40:13 e
+> 10:41:48), mas a URL era lida antes do commit e o bot saía da Liquidação.
+> A âncora por URL em Dados do Cálculo fez o 1º POST cair em `logon.jsf`.
+>
+> **Fix:** marca `window.__pjcNavTok` antes do click + `_aguardar_documento_trocar`
+> (até 20s; sem troca = click inerte, o chamador verifica o destino);
+> Fase 14 ancora em Verbas por CLIQUE; poll da URL após o onclick-exec.
+>
+> **Mesmo run:** `_ajustar_periodo_reflexo` expandia o "Exibir" por
+> `tr.textContent.includes(verba)` — a TR de LAYOUT (Invariante 2) — e o link
+> do reflexo do ADICIONAL ficava oculto ("Element is not visible" ×3): o 13º
+> sobre o adicional (09/2025→03/2026, multi-ano) apuraria só os avos de 2026.
+> Agora a linha é a do PRÓPRIO link (`formulario:listagem:N:`), só expande se
+> oculto, e o click cai para JS `element.click()`.
+>
+> Protegido por `test_inv163`.
+
+---
+
 ## Regra obrigatória — Reconexão do SSE NUNCA reinicia a automação (#80-DW)
 
 > **Regra do usuário (23/09/2026):** *"exija o clique em Re-executar em vez de

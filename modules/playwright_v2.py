@@ -1328,7 +1328,10 @@ class PlaywrightAutomatorV2:
         Returns True se conseguiu clicar.
         """
         try:
-            clicou = self._page.evaluate("""(liId) => {
+            _tok = f"nav{id(self)}_{__import__('time').monotonic_ns()}"
+            clicou = self._page.evaluate("""([liId, tok]) => {
+                // #80-DX: marca o documento ATUAL — some quando o novo comita
+                window.__pjcNavTok = tok;
                 const li = document.getElementById(liId);
                 if (li) { const a = li.querySelector('a'); if (a) { a.click(); return true; } }
                 // Fallback: id por sufixo (alguns menus têm prefixo)
@@ -1339,8 +1342,9 @@ class PlaywrightAutomatorV2:
                     if (a) { a.click(); return true; }
                 }
                 return false;
-            }""", li_id)
+            }""", [li_id, _tok])
             if clicou:
+                self._aguardar_documento_trocar(_tok, li_id)
                 self._aguardar_ajax(10000)
                 self._capturar_conversation_id()
                 self.log(f"  → navegou para {li_id} via click sidebar (Seam init)")
@@ -1350,6 +1354,39 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             self.log(f"  ⚠ _navegar_menu_via_click({li_id}): {e}")
             return False
+
+    def _aguardar_documento_trocar(self, tok: str, contexto: str = "",
+                                   timeout_ms: int = 20000) -> bool:
+        """#80-DX (0000348-36, 29/09/2026): esperar o NOVO documento comitar.
+
+        O click no sidebar é um A4J cuja resposta manda o browser a outra
+        página. `_aguardar_ajax` (networkidle) volta NA HORA — o load state
+        do documento antigo já foi atingido — e a página de Verbas tem
+        ~1,2 MB: o Firefox da VM leva segundos para trocar de documento.
+        O próximo click caía no documento ANTIGO e era descartado. Access
+        log do Tomcat: `POST principal.jsf → GET verba-calculo.jsf` e, 2s
+        depois, o Liquidar postado DE NOVO por `principal.jsf` (inerte) —
+        3 tentativas + Recentes, cálculo sem PJC.
+
+        Sinal: a marca `window.__pjcNavTok` gravada antes do click só some
+        quando o novo documento substitui o antigo. Sem troca no prazo,
+        segue (click inerte — o chamador verifica o destino)."""
+        import time as _tdx
+        fim = _tdx.monotonic() + timeout_ms / 1000
+        while _tdx.monotonic() < fim:
+            try:
+                ainda = self._page.evaluate("(t) => window.__pjcNavTok === t", tok)
+            except Exception:
+                ainda = True  # contexto trocando no meio do evaluate
+            if not ainda:
+                try:
+                    self._page.wait_for_load_state("domcontentloaded", timeout=30000)
+                except Exception:
+                    pass
+                return True
+            self._page.wait_for_timeout(250)
+        self.log(f"    ℹ #80-DX click em {contexto} não trocou a página em {timeout_ms//1000}s")
+        return False
 
     def _navegar_menu(self, li_id: str) -> None:
         """Navega para item do menu lateral.
@@ -9761,25 +9798,37 @@ class PlaywrightAutomatorV2:
         """
         alvo = (reflexo.expresso_reflex_alvo or "").upper().strip()
         p = verba_principal.parametros
-        candidatos = [verba_principal.nome_pjecalc]
-        if getattr(verba_principal, "expresso_alvo", None) and \
-           verba_principal.expresso_alvo != verba_principal.nome_pjecalc:
-            candidatos.append(verba_principal.expresso_alvo)
         link_id = None
         for tent in range(1, 4):
+            # #80-DX (0000348-36, 29/09/2026): expandir o "Exibir" da linha
+            # CERTA. O match antigo `tr.textContent.includes(verba)` casava a
+            # <tr> EXTERNA de layout (Invariante 2) e expandia a 1ª verba da
+            # listagem; o link do reflexo da verba desejada ficava OCULTO e o
+            # click nativo falhava 3× ("Element is not visible") → período e
+            # característica do reflexo NÃO ajustados (13º multi-ano sobre o
+            # ADICIONAL apuraria só os avos do ano da rescisão). Agora: a
+            # linha é a do PRÓPRIO link do reflexo (formulario:listagem:N:),
+            # e só se expande quando o link ainda está oculto (o toggle
+            # fecharia um painel já aberto).
             self._page.evaluate(
-                """(cands) => {
-                    const norm = s => (s||'').toUpperCase();
-                    for (const c of cands) {
-                        for (const tr of [...document.querySelectorAll('tr')]) {
-                            if (!norm(tr.textContent).includes(norm(c))) continue;
-                            const ex = tr.querySelector('span.linkDestinacoes');
-                            if (ex) { ex.click(); return true; }
-                        }
-                    }
-                    return false;
+                """(alvo) => {
+                    const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                    const links = [...document.querySelectorAll('a[id*=":listaReflexo:"]')]
+                        .filter(a => (a.className||'').includes('linkParametrizar')
+                                  || (a.title||'').toUpperCase().includes('PARAMETRIZAR'));
+                    const lk = links.find(a => { const tr = a.closest('tr');
+                        return tr && norm(tr.textContent).includes(norm(alvo)); });
+                    if (!lk || lk.offsetParent !== null) return 'ja-visivel-ou-ausente';
+                    const m = lk.id.match(/^(.*:listagem:\\d+:)listaReflexo:/);
+                    if (!m) return 'sem-prefixo';
+                    const cel = [...document.querySelectorAll('[id^="' + m[1] + '"]')]
+                        .find(e => !e.id.includes(':listaReflexo:'));
+                    const tr = cel ? cel.closest('tr') : null;
+                    const ex = tr ? tr.querySelector('span.linkDestinacoes') : null;
+                    if (ex) { ex.click(); return 'exibir:' + m[1]; }
+                    return 'sem-exibir';
                 }""",
-                candidatos,
+                alvo,
             )
             self._aguardar_ajax(3000)
             self._page.wait_for_timeout(800)
@@ -9817,9 +9866,19 @@ class PlaywrightAutomatorV2:
         form_ok = False
         for _ft in range(1, 4):
             try:
-                self._page.locator(f"a#{esc}").click(force=True)
+                self._page.locator(f"a#{esc}").click(force=True, timeout=5000)
             except Exception as e:
-                self.log(f"    ⚠ click Parâmetros reflexo (tent {_ft}/3): {e}")
+                # #80-DX: link oculto (painel recolhido) → JS element.click()
+                # dispara o onclick A4J mesmo sem visibilidade (mesmo padrão
+                # do "exact-cell:js-click" do Parâmetros da principal).
+                self.log(f"    ⚠ click nativo Parâmetros reflexo (tent {_ft}/3): {str(e).splitlines()[0][:90]} — JS click")
+                try:
+                    self._page.evaluate(
+                        "(id) => { const a = document.getElementById(id); if (a) a.click(); return !!a; }",
+                        link_id,
+                    )
+                except Exception as e2:
+                    self.log(f"    ⚠ JS click Parâmetros reflexo: {str(e2)[:90]}")
             self._aguardar_ajax(8000)
             try:
                 self._page.wait_for_selector(
@@ -13949,13 +14008,20 @@ class PlaywrightAutomatorV2:
         # Sempre passar pelo Dados do Cálculo primeiro para garantir que
         # estamos no contexto do cálculo (sidebar Operações renderiza).
         self.log(f"  [DIAG-liq] conv_id no início: {self._calculo_conversation_id}")
+        # #80-DX (0000348-36, 29/09/2026): âncora = Verbas por CLIQUE (Seam
+        # init) — o mesmo padrão do Fechar (#80-AW). A âncora antiga (Dados do
+        # Cálculo por URL direta) deixava o click do Liquidar inerte (#80-AU)
+        # e, neste caso, o POST de calculo.jsf foi redirecionado a
+        # logon.jsf → principal.jsf: 180s perdidos + conversa descartada.
         try:
-            self._navegar_menu("li_calculo_dados_do_calculo")
-            self._aguardar_ajax(8000)
-            self._page.wait_for_timeout(1500)
-        except Exception:
-            pass
-        self.log(f"  [DIAG-liq] conv_id após dados_do_calculo: {self._calculo_conversation_id}")
+            self._aguardar_servidor_ocioso(contexto="âncora Liquidar (#80-DX)")
+            if not self._navegar_menu_via_click("li_calculo_verbas"):
+                self._navegar_menu("li_calculo_verbas")
+                self._navegar_menu_via_click("li_calculo_verbas")
+            self._page.wait_for_selector("#li_operacoes_liquidar", state="attached", timeout=20000)
+        except Exception as _e:
+            self.log(f"  ⚠ #80-DX âncora Verbas pré-Liquidar: {str(_e)[:100]}")
+        self.log(f"  [DIAG-liq] conv_id após âncora Verbas: {self._calculo_conversation_id}")
 
         # ── 14b. Navegar para Liquidar via sidebar JSF ─────────────────────
         # #80-AY: gate ANTES do 1º click — se o servidor ainda mastiga a op
@@ -14116,6 +14182,14 @@ class PlaywrightAutomatorV2:
                             }"""
                         )
                         self.log(f"  ↪ #80-AX estratégia extra Liquidar: {_r}")
+                        # #80-DX: o onclick-exec NAVEGOU (access log: GET
+                        # liquidacao.jsf 10:40:13 e 10:41:48), mas a URL era
+                        # lida 2s depois, antes do novo documento comitar — o
+                        # bot declarava falha e SAÍA da Liquidação. Poll da URL.
+                        for _q in range(60):  # até ~30s
+                            if "liquidacao.jsf" in (self._page.url or ""):
+                                break
+                            self._page.wait_for_timeout(500)
                         self._aguardar_ajax(12000)
                         self._page.wait_for_timeout(2000)
                     # #80-AX-2: se o submit rodou mas a URL não mudou, o servidor

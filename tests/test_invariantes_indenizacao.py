@@ -5640,3 +5640,35 @@ def test_inv162_previa_aceita_verbas_principais_vazias():
     bot = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
     assert "Sem verbas principais — pulando" in bot, (
         "REGRESSÃO #80-DV: fase_verbas deixou de pular a lista vazia")
+
+
+def test_inv163_sidebar_click_espera_documento_novo_e_reflexo_linha_certa():
+    """#80-DX (0000348-36 PATRICK, 29/09/2026): cálculo terminou SEM PJC.
+
+    (a) `_navegar_menu_via_click` devolvia o controle com o documento ANTIGO
+    ainda ativo (networkidle volta na hora após A4J; verba-calculo.jsf tem
+    ~1,2 MB). O click seguinte no Liquidar era postado pela página antiga e
+    descartado — access log: `GET verba-calculo` e, 2s depois, `POST
+    principal.jsf` inerte. A marca `window.__pjcNavTok` prova a troca.
+    (b) a Fase 14 ancorava em Dados do Cálculo por URL direta (POST caiu em
+    logon.jsf); âncora = Verbas por CLIQUE.
+    (c) após o onclick-exec a URL era lida antes do commit — o bot SAÍA da
+    Liquidação que acabara de abrir.
+    (d) `_ajustar_periodo_reflexo` expandia o Exibir por
+    `tr.textContent.includes` (TR de layout — Invariante 2): link do reflexo
+    oculto, 13º multi-ano sobre o ADICIONAL sem ajuste."""
+    src = PLAYWRIGHT_V2
+    nav = src.split("def _navegar_menu_via_click")[1].split("\n    def ")[0]
+    assert "__pjcNavTok" in nav and "_aguardar_documento_trocar(" in nav
+    assert "def _aguardar_documento_trocar" in src
+    liq = src.split("def fase_liquidar_e_exportar")[1].split("\n    def ")[0]
+    ini = liq.split("# ── 14b.")[0]
+    assert '_navegar_menu("li_calculo_dados_do_calculo")' not in ini, (
+        "REGRESSÃO #80-DX: âncora do Liquidar voltou a ser Dados por URL")
+    assert '_navegar_menu_via_click("li_calculo_verbas")' in ini
+    assert 'for _q in range(60)' in liq, "poll da URL pós onclick-exec removido"
+    ref = src.split("def _ajustar_periodo_reflexo")[1].split("\n    def ")[0]
+    assert "querySelectorAll('tr')" not in ref, (
+        "REGRESSÃO #80-DX: Exibir do reflexo voltou a casar a TR de layout")
+    assert "listaReflexo:" in ref and "offsetParent" in ref
+    assert "a.click()" in ref or "if (a) a.click()" in ref, "fallback JS click removido"
