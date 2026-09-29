@@ -5687,3 +5687,25 @@ def test_inv164_ajuste_13_multiano_so_reflexo_do_13_e_cancela_save_recusado():
     ref = src.split("def _ajustar_periodo_reflexo")[1].split("\n    def ")[0]
     assert '_clicar("cancelar"' in ref, (
         "REGRESSÃO #80-DY: save recusado do reflexo sem Cancelar prende o form")
+
+
+def test_inv165_gozo_declarado_no_concessivo_vai_para_gozo_1():
+    """#80-DZ (0000348-36): 'usufruído de 01/08/2025 a 30/08/2025' foi para
+    periodo_concessivo_*; a aba ficou com o gozo padrão e o PJE-Calc descontou
+    01–07/09 do adicional. Concessivo ≤60 dias em PA gozado = gozo."""
+    from modules.json_normalizer import _norm_ferias_gozo_declarado_como_concessivo as f
+    d = {"ferias": {"periodos": [
+        {"periodo_aquisitivo_inicio": "08/09/2023", "periodo_aquisitivo_fim": "07/09/2024",
+         "periodo_concessivo_inicio": "01/08/2025", "periodo_concessivo_fim": "30/08/2025",
+         "situacao": "GOZADAS", "gozo_1": {"data_inicio": None, "data_fim": None, "dobra": False}},
+        {"periodo_aquisitivo_inicio": "08/09/2024", "periodo_aquisitivo_fim": "07/09/2025",
+         "periodo_concessivo_inicio": "08/09/2025", "periodo_concessivo_fim": "07/09/2026",
+         "situacao": "GOZADAS", "gozo_1": None},
+    ]}}
+    f(d)
+    a, b = d["ferias"]["periodos"]
+    assert a["gozo_1"]["data_inicio"] == "01/08/2025" and a["gozo_1"]["data_fim"] == "30/08/2025"
+    assert a["periodo_concessivo_inicio"] == "08/09/2024" and a["periodo_concessivo_fim"] == "07/09/2025"
+    assert b["gozo_1"] is None, "concessivo real (1 ano) não pode virar gozo"
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "Período CONCESSIVO ≠ período de GOZO (#80-DZ)" in ext

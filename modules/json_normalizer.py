@@ -1263,6 +1263,53 @@ def _fer_deferido(pa: dict) -> bool:
     return str(pa.get("situacao") or "").upper() not in ("GOZADAS", "NAO_DIREITO")
 
 
+def _norm_ferias_gozo_declarado_como_concessivo(data: dict[str, Any]) -> None:
+    """Gozo declarado nos campos de CONCESSIVO vai para `gozo_1` — #80-DZ.
+
+    **0000348-36 (29/09/2026):** a sentença diz que o PA 08/09/2023–07/09/2024
+    "foi usufruído de 01/08/2025 a 30/08/2025"; a IA gravou essas datas em
+    `periodo_concessivo_inicio/fim` e deixou `gozo_1` vazio. O concessivo é
+    DERIVADO pelo PJE-Calc (12 meses após o PA) e o bot não o escreve — a aba
+    ficou com o gozo PADRÃO (09/08→07/09/2025) e o PJE-Calc descontou 01–07/09
+    do ADICIONAL DE INSALUBRIDADE (setembro 23/30: R$ 232,76 em vez de 303,60).
+
+    Um concessivo real tem ~1 ano; "concessivo" de até 60 dias num PA gozado
+    só pode ser o período de FRUIÇÃO. Move para `gozo_1` e restaura o
+    concessivo derivado. Roda ANTES do #80-DC/#80-CY (que usam o gozo).
+    """
+    fer = data.get("ferias")
+    if not isinstance(fer, dict) or not isinstance(fer.get("periodos"), list):
+        return
+    from datetime import timedelta as _td
+    import logging
+    _log = logging.getLogger(__name__)
+    for pa in fer["periodos"]:
+        if not isinstance(pa, dict):
+            continue
+        if (pa.get("situacao") or "").upper() not in ("GOZADAS", "PARCIAL_GOZADAS"):
+            continue
+        g1 = pa.get("gozo_1")
+        if isinstance(g1, dict) and (g1.get("data_inicio") or g1.get("data_fim")):
+            continue
+        ci, cf = _fer_parse(pa.get("periodo_concessivo_inicio")), _fer_parse(pa.get("periodo_concessivo_fim"))
+        if not ci or not cf or cf < ci or (cf - ci).days > 60:
+            continue
+        pa["gozo_1"] = {
+            "data_inicio": ci.strftime("%d/%m/%Y"),
+            "data_fim": cf.strftime("%d/%m/%Y"),
+            "dobra": bool((g1 or {}).get("dobra")) if isinstance(g1, dict) else False,
+        }
+        pa_ini, pa_fim = _fer_parse(pa.get("periodo_aquisitivo_inicio")), _fer_parse(pa.get("periodo_aquisitivo_fim"))
+        if pa_ini and pa_fim:
+            pa["periodo_concessivo_inicio"] = (pa_fim + _td(days=1)).strftime("%d/%m/%Y")
+            pa["periodo_concessivo_fim"] = (_fer_mais_anos(pa_ini, 2) - _td(days=1)).strftime("%d/%m/%Y")
+        _log.warning(
+            "Normalizer #80-DZ: PA %s — datas %s→%s estavam no CONCESSIVO; "
+            "são o GOZO (≤60 dias) → movidas para gozo_1",
+            pa.get("periodo_aquisitivo_inicio"), pa["gozo_1"]["data_inicio"], pa["gozo_1"]["data_fim"],
+        )
+
+
 def _norm_ferias_completar_periodos_do_contrato(data: dict[str, Any]) -> None:
     """A aba Férias espelha o CONTRATO INTEIRO, não só o deferido — #80-DC.
 
@@ -2755,6 +2802,8 @@ def normalize_v2_json(
 
     # Salvaguarda #80-DC: a aba Férias espelha o CONTRATO — completar os PAs que
     # a prévia não declarou (deferido=False) para que a omissão seja VISÍVEL.
+    # #80-DZ ANTES: gozo declarado no campo de concessivo → gozo_1.
+    _norm_ferias_gozo_declarado_como_concessivo(data)
     _norm_ferias_completar_periodos_do_contrato(data)
 
     # Salvaguarda #80-CY: período da verba de FÉRIAS estreitado até a 1ª data de

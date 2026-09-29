@@ -303,6 +303,15 @@ playwright_pjecalc.py (Automação)
 > (Regerar "não encontrado", guarda da Fase 14 leu 0 verbas → sem PJC). Fix:
 > filtrar por `alvo.endswith("SOBRE " + nome_do_13º)` e, em save recusado,
 > **Cancelar** o form. Protegido por `test_inv164`.
+>
+> **#80-DZ — gozo declarado no CONCESSIVO.** Mesmo processo: "PA 2023/24
+> usufruído de 01/08/2025 a 30/08/2025" foi para `periodo_concessivo_*`
+> (`gozo_1` vazio). O concessivo é derivado e o bot não o escreve → aba com
+> gozo PADRÃO (09/08→07/09/2025) → PJE-Calc descontou 01–07/09 do ADICIONAL
+> (setembro 23/30). Normalizer `_norm_ferias_gozo_declarado_como_concessivo`
+> (antes do #80-DC/CY): "concessivo" ≤ 60 dias em PA GOZADAS = gozo →
+> `gozo_1`, concessivo derivado restaurado. Prompt §6.ferias instrui.
+> Protegido por `test_inv165`.
 
 ---
 

@@ -1745,6 +1745,13 @@ Situação SUGERIDA pelo manual (confira contra a sentença e a defesa):
 - `INDENIZADAS` — o concessivo termina DEPOIS do desligamento (inclui o
   proporcional final)
 
+**Período CONCESSIVO ≠ período de GOZO (#80-DZ):** o concessivo é DERIVADO
+pelo PJE-Calc (os 12 meses seguintes ao aquisitivo) — nunca coloque nele as
+datas de fruição. Quando a sentença disser que as férias foram
+"usufruídas/gozadas de DD/MM a DD/MM", essas datas vão em
+`gozo_1: {"data_inicio", "data_fim", "dobra"}`. Sem gozo declarado, o PJE-Calc
+usa um gozo padrão e DESCONTA esses dias das verbas mensais (adicionais etc.).
+
 **`deferido` (true/false) é campo SEPARADO de `situacao` — não confunda:**
 - `situacao` é FATO: o empregado gozou as férias ou não.
 - `deferido` é DIREITO: a sentença mandou PAGAR aquele período aquisitivo.
