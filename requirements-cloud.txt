@@ -27,7 +27,7 @@ python-multipart>=0.0.9
 jinja2>=3.1.0
 
 # ── Banco de Dados ───────────────────────────────────────────────────────────
-sqlalchemy>=2.0.0
+sqlalchemy>=2.0.0,<2.1  # 2.1 troca o driver padrão do PostgreSQL p/ psycopg v3 (não instalado) — derrubou o app em 29/09/2026
 psycopg2-binary>=2.9.9
 
 # ── Config Pydantic v2 ────────────────────────────────────────────────────────
