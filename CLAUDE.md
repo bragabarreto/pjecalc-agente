@@ -292,6 +292,17 @@ playwright_pjecalc.py (Automação)
 > oculto, e o click cai para JS `element.click()`.
 >
 > Protegido por `test_inv163`.
+>
+> **#80-DY — o ajuste "13º multi-ano" é só para reflexo DO 13º.** A subfase
+> pós-loop (`_ajustar_periodo_reflexo`, inv26) serve para `<X> SOBRE 13º
+> SALÁRIO` (ex.: MULTA 467). A prévia do 0000348-36 repetia `13º SALÁRIO SOBRE
+> ADICIONAL` sob o 13º; esse reflexo é do ADICIONAL e já nasce 13º/Dezembro
+> com o período do adicional. Forçar nele o período do 13º (08/09/2023,
+> anterior ao adicional) fez o save ser RECUSADO em silêncio e o apresentador
+> ficou em modo Alteração: `verba-calculo.jsf` passou a renderizar o form
+> (Regerar "não encontrado", guarda da Fase 14 leu 0 verbas → sem PJC). Fix:
+> filtrar por `alvo.endswith("SOBRE " + nome_do_13º)` e, em save recusado,
+> **Cancelar** o form. Protegido por `test_inv164`.
 
 ---
 

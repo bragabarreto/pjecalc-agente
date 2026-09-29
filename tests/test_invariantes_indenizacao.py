@@ -5672,3 +5672,18 @@ def test_inv163_sidebar_click_espera_documento_novo_e_reflexo_linha_certa():
         "REGRESSÃO #80-DX: Exibir do reflexo voltou a casar a TR de layout")
     assert "listaReflexo:" in ref and "offsetParent" in ref
     assert "a.click()" in ref or "if (a) a.click()" in ref, "fallback JS click removido"
+
+
+def test_inv164_ajuste_13_multiano_so_reflexo_do_13_e_cancela_save_recusado():
+    """#80-DY (0000348-36, 29/09/2026): a prévia repetia '13º SALÁRIO SOBRE
+    ADICIONAL' sob o 13º; a subfase multi-ano forçou o período do 13º nesse
+    reflexo do ADICIONAL → save RECUSADO em silêncio → apresentador preso no
+    form → listagem 'vazia' → Fase 14 abortou sem PJC."""
+    src = PLAYWRIGHT_V2
+    i = src.find("ajustes finos dos reflexos do 13º multi-ano")
+    bloco = src[i:i + 3000]
+    assert '"SOBRE " + n' in bloco and "#80-DY" in bloco, (
+        "REGRESSÃO #80-DY: subfase multi-ano voltou a ajustar reflexo de OUTRA verba")
+    ref = src.split("def _ajustar_periodo_reflexo")[1].split("\n    def ")[0]
+    assert '_clicar("cancelar"' in ref, (
+        "REGRESSÃO #80-DY: save recusado do reflexo sem Cancelar prende o form")

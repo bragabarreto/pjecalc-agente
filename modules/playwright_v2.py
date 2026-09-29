@@ -3148,7 +3148,22 @@ class PlaywrightAutomatorV2:
                 _pf = _dtp.strptime(v.parametros.periodo_fim, "%d/%m/%Y")
                 if _pi.year == _pf.year:
                     continue
+                _nomes_13 = {
+                    (n or "").upper().strip()
+                    for n in (v.nome_pjecalc, getattr(v, "expresso_alvo", None)) if n
+                }
                 for r in v.reflexos:
+                    # #80-DY (0000348-36, 29/09/2026): só reflexo DO 13º
+                    # ("<X> SOBRE 13º SALÁRIO"). "13º SALÁRIO SOBRE ADICIONAL"
+                    # é reflexo do ADICIONAL (a prévia o repete sob o 13º) e já
+                    # nasce 13º/Dezembro com o período do adicional; forçar o
+                    # período do 13º (anterior ao do adicional) fazia o save
+                    # ser RECUSADO em silêncio e prendia o apresentador no
+                    # form → listagem "vazia" → Fase 14 abortava sem PJC.
+                    _alvo_r = (r.expresso_reflex_alvo or "").upper().strip()
+                    if not any(_alvo_r.endswith("SOBRE " + n) for n in _nomes_13):
+                        self.log(f"    ℹ #80-DY '{_alvo_r[:50]}' não é reflexo do 13º — ajuste multi-ano não se aplica")
+                        continue
                     self._ajustar_periodo_reflexo(v, r)
             except Exception as _e:
                 self.log(f"  ⚠ ajuste fino reflexo 13º: {_e}")
@@ -9965,6 +9980,17 @@ class PlaywrightAutomatorV2:
         if not sucesso:
             erro = self._verificar_erro_jsf()
             self.log(f"    ⚠ save do reflexo sem confirmação{(' — ' + erro[:120]) if erro else ''}")
+            # #80-DY: save recusado deixa o apresentador (@Synchronized,
+            # conversa) em modo ALTERAÇÃO — toda verba-calculo.jsf passa a
+            # renderizar o form, sem listagem (Regerar "não encontrado",
+            # guarda da Fase 14 lê 0 verbas). Cancelar devolve à listagem.
+            try:
+                self._clicar("cancelar", timeout_ms=5000)
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1000)
+                self.log("    ↩ #80-DY form do reflexo cancelado (volta à listagem)")
+            except Exception as _ec:
+                self.log(f"    ⚠ #80-DY cancelar form do reflexo: {str(_ec)[:90]}")
         try:
             if "verba-calculo.jsf" not in self._page.url:
                 self._navegar_menu("li_calculo_verbas")
