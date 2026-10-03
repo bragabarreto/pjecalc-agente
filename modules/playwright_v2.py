@@ -8921,9 +8921,12 @@ class PlaywrightAutomatorV2:
                 divisor = f"{float(_ov_div):.4f}".rstrip("0").rstrip(".").replace(".", ",")
             if _ov_mult is not None and float(_ov_mult) > 0:
                 multiplicador = f"{float(_ov_mult):.4f}".rstrip("0").rstrip(".").replace(".", ",")
+            _ov_qtd = getattr(ov, "quantidade_informada", None) if ov else None
+            if _ov_qtd is not None and float(_ov_qtd) > 0:
+                quantidade = f"{float(_ov_qtd):.4f}".rstrip("0").rstrip(".").replace(".", ",")
         except (TypeError, ValueError):
             pass
-        if _eh_hora and not (is_ferias or is_13 or is_fgts):
+        if _eh_hora and not (is_ferias or is_13 or is_fgts) and quantidade == "1":
             self.log(
                 f"    🛑 #80-EC reflexo de HORAS '{_tipo_r[:40]}' lançado com quantidade=1 "
                 "— a quantidade MENSAL de horas pagas (holerites) NÃO é derivável; "

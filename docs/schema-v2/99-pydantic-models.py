@@ -759,6 +759,9 @@ class ParametrosReflexo(BaseModel):
     tratamento_fracao_mes: Optional[Literal["INTEGRALIZAR", "NAO_INTEGRALIZAR", "MANTER"]] = None
     outro_valor_divisor: Optional[float] = None
     outro_valor_multiplicador: Optional[float] = None
+    # #80-EC: quantidade INFORMADA do reflexo manual (ex.: média mensal de
+    # horas extras pagas nos holerites). Sem ela o bot lança 1.
+    quantidade_informada: Optional[float] = None
     # Override de classificação (necessário p/ reflexo manual)
     valor: Optional[TipoValor] = None
     caracteristica: Optional[CaracteristicaVerba] = None
