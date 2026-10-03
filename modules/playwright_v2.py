@@ -3906,7 +3906,16 @@ class PlaywrightAutomatorV2:
         # Run 2 do 0000725-37: a PLR (Expresso, MENSAL, período = cálculo)
         # ficou com a grade de 6 linhas sem o Regerar → só verba MANUAL
         # dispensa o proativo; Expresso mantém o comportamento original.
-        _precisa_proativo = str(_estrat_v or "").lower() != "manual"
+        # Run 3 do 0000725-37: o Sobrescrever proativo da PLR (Expresso, 2ª
+        # passada) é GLOBAL e APAGOU os valores mensais do Kit Natalino recém-
+        # salvos (voltou a 32 × R$ 336,58) — a mesma lição do THAÍS
+        # (`_ocorrencias_editadas`). Regra: só Expresso com DESLIGAMENTO/período
+        # curto, e NUNCA depois que alguma grade INFORMADO já foi editada.
+        _precisa_proativo = (
+            str(_estrat_v or "").lower() != "manual"
+            and ("DESLIGAMENTO" in _ocorr_v or self._verba_periodo_curto(v))
+            and not getattr(self, "_ocorrencias_editadas", False)
+        )
         if _precisa_proativo:
             try:
                 ok_regerar = self._regerar_com_modal_confirmacao(
@@ -3918,7 +3927,7 @@ class PlaywrightAutomatorV2:
             except Exception as _e:
                 self.log(f"    ⚠ Regerar proativo: {_e}")
         else:
-            self.log("    ℹ #80-EE Regerar proativo dispensado (verba Manual — ocorrências já nasceram com o período certo)")
+            self.log("    ℹ #80-EE Regerar proativo dispensado (verba Manual/MENSAL ou grade INFORMADO já editada — Sobrescrever é global)")
 
         # FORENSE (25/05/2026 v2): dump DOM ANTES de clicar linkOcorrencias —
         # capturar estado real da listagem após PROATIVO Regerar.
@@ -10021,14 +10030,24 @@ class PlaywrightAutomatorV2:
         ov = reflexo.parametros_override
         alvo = (reflexo.expresso_reflex_alvo or reflexo.nome or "").upper().strip()
         # candidatos: alvo da prévia, "<tipo> SOBRE <nome_pjecalc>" e o nome do reflexo
-        alvos = [alvo]
+        # Run 3: o alvo genérico "13 SALARIO SOBRE DIFERENCA SALARIAL" é prefixo
+        # dos reflexos das DUAS diferenças — casava sempre a 1ª linha e o
+        # override da CCT 2023/2024 era gravado de novo na CCT 2021/2023. O
+        # candidato MAIS ESPECÍFICO ("<tipo> SOBRE <nome_pjecalc>") vem primeiro
+        # e o matcher itera candidatos por fora.
+        alvos = []
         if " SOBRE " in alvo:
             _tipo = alvo[: alvo.index(" SOBRE ")]
-            for _y in (verba_principal.nome_pjecalc, getattr(verba_principal, "expresso_alvo", None)):
-                if _y and f"{_tipo} SOBRE {_y.upper()}" not in alvos:
-                    alvos.append(f"{_tipo} SOBRE {_y.upper()}")
+            if verba_principal.nome_pjecalc:
+                alvos.append(f"{_tipo} SOBRE {verba_principal.nome_pjecalc.upper()}")
         if reflexo.nome and reflexo.nome.upper() not in alvos:
             alvos.append(reflexo.nome.upper())
+        if " SOBRE " in alvo:
+            _ea = getattr(verba_principal, "expresso_alvo", None)
+            if _ea and f"{_tipo} SOBRE {_ea.upper()}" not in alvos:
+                alvos.append(f"{_tipo} SOBRE {_ea.upper()}")
+        if alvo not in alvos:
+            alvos.append(alvo)
         self.log(f"  → #80-ED Parâmetros do reflexo '{alvo[:50]}': aplicando override")
         self._aguardar_servidor_ocioso(contexto="#80-ED pré-form reflexo")
         # Re-ancorar na LISTAGEM de verbas (a Fase 5 deixa o bot na grade de
@@ -10065,8 +10084,12 @@ class PlaywrightAutomatorV2:
                     const links = [...document.querySelectorAll('a[id*=":listaReflexo:"]')]
                         .filter(a => (a.className||'').includes('linkParametrizar')
                                   || (a.title||'').toUpperCase().includes('PARAMETRIZAR'));
-                    const lk = links.find(a => { const tr = a.closest('tr');
-                        return tr && cands.some(c => norm(tr.textContent).includes(c)); });
+                    let lk = null;
+                    for (const c of cands) {
+                        lk = links.find(a => { const tr = a.closest('tr');
+                            return tr && norm(tr.textContent).includes(c); });
+                        if (lk) break;
+                    }
                     if (!lk || lk.offsetParent !== null) return 'ja-visivel-ou-ausente';
                     const m = lk.id.match(/^(.*:listagem:\\d+:)listaReflexo:/);
                     if (!m) return 'sem-prefixo';
@@ -10089,9 +10112,11 @@ class PlaywrightAutomatorV2:
                     const links = [...document.querySelectorAll('a[id*=":listaReflexo:"]')]
                         .filter(a => (a.title||'').toUpperCase().includes('PARAMETRIZAR')
                                   || (a.className||'').includes('linkParametrizar'));
-                    for (const a of links) {
-                        const tr = a.closest('tr');
-                        if (tr && cands.some(c => norm(tr.textContent).includes(c))) return a.id;
+                    for (const c of cands) {
+                        for (const a of links) {
+                            const tr = a.closest('tr');
+                            if (tr && norm(tr.textContent).includes(c)) return a.id;
+                        }
                     }
                     return null;
                 }""",
