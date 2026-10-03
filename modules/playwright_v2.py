@@ -8289,8 +8289,13 @@ class PlaywrightAutomatorV2:
             except Exception as _e:
                 self.log(f"    ⚠ tentativa {_tent}/3 do reflexo Manual '{nome[:40]}': {str(_e)[:120]}")
                 ok = False
-            # VERIFICAR persistência na listagem (independente do que o form disse)
-            if self._verificar_verba_na_listagem(nome_persistido):
+            # VERIFICAR persistência na listagem (independente do que o form disse).
+            # #80-EC run 2: descrições truncadas a 50 ficam IDÊNTICAS entre
+            # reflexos homônimos de principais distintas — conferir primeiro
+            # pelo nome COMPLETO "<descricao> SOBRE <principal>" da listagem.
+            _nome_completo = f"{nome_persistido} SOBRE {(verba_principal.nome_pjecalc or '').upper()}"
+            if self._verificar_verba_na_listagem(_nome_completo) or \
+               self._verificar_verba_na_listagem(nome_persistido):
                 self.log(f"  ✓ Reflexo Manual '{nome_persistido}' criado e CONFIRMADO na listagem")
                 return True
             if ok:
@@ -8617,8 +8622,13 @@ class PlaywrightAutomatorV2:
         valor). Só considera células que contêm ' SOBRE ' (linha de reflexo, não
         do principal)."""
         alvo = getattr(reflexo, "expresso_reflex_alvo", None) or getattr(reflexo, "nome", None) or ""
-        if " SOBRE " not in alvo.upper():
-            alvo = f"{alvo} SOBRE {verba_principal.nome_pjecalc}"
+        # #80-EC run 2 (0000725-37): o alvo "ADICIONAL DE PERICULOSIDADE 30%
+        # SOBRE DIFERENCA SALARIAL" (sem a CCT) tinha os tokens CONTIDOS na
+        # linha do reflexo Manual da OUTRA diferença (CCT 2021/2023) → "já
+        # presente" e a periculosidade da CCT 2023/2024 nunca foi criada. A
+        # parte após " SOBRE " é SEMPRE o nome completo da principal.
+        _tipo_alvo = alvo.upper().split(" SOBRE ")[0].strip() if alvo else ""
+        alvo = f"{_tipo_alvo} SOBRE {verba_principal.nome_pjecalc}"
         r_toks = self._tokens_fidelidade(alvo)
         if not r_toks:
             return False
