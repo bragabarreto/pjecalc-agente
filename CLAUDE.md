@@ -351,6 +351,19 @@ depender da grade). Prompt: parcela semestral/anual = INFORMADO +
 `valores_mensais` só nos vencimentos, nunca CALCULADO MENSAL (PLR 40% ×
 60 meses = R$ 74 mil).
 
+> **Validação end-to-end (4 execuções em 03/10/2026, PJC final 215106):**
+> fidelidade 100%, liquidação sem erro, 13º 130,06 + 32,52 + 3,01, férias
+> 65,03 + 151,73 + 4,01 (o reflexo "sempre zero" apareceu), periculosidade
+> 563,84 + 10,84, HE 125,43, Kit 3 ocorrências, 4 multas com 1 ocorrência,
+> PLR 10 semestres com as 4 deduções. Lições das execuções 2 e 3 (todas no
+> código): (a) o alvo do override vem sem acento/ordinal ("13 SALARIO") e é
+> PREFIXO dos reflexos das duas diferenças — normalizar NFD e casar o
+> candidato MAIS ESPECÍFICO ("<tipo> SOBRE <nome_pjecalc>") primeiro; (b) a
+> descrição truncada a 50 fica IDÊNTICA entre reflexos homônimos — dedup e
+> verificação pelo nome completo da listagem; (c) o Regerar SOBRESCREVER
+> proativo da Fase 5 é GLOBAL: só Expresso com DESLIGAMENTO/período curto e
+> NUNCA após grade INFORMADO editada (apagou o Kit na execução 3).
+
 > Ainda em aberto neste caso (ajustes do calculista, não do app): PLR com
 > deduções zeradas e 1º sem/2021 incluído; HE 2023/2024 com o 13º somado na
 > base; periculosidade 2021/2023 e HE sem incidências; 13º sobre diferença
