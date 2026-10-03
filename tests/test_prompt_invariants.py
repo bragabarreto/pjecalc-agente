@@ -215,3 +215,33 @@ def test_regressao_nao_aparece(regra_ressuscitada: str, texto: str):
             or "NUNCA" in contexto
             or "Exemplo errado" in contexto
         ), f"Regressão detectada: {regra_ressuscitada} aparece sem contexto de erro"
+
+
+# ─── Caso REGINALDO 0000725-37 (03/10/2026) — #80-EA..EE ───────────────────
+
+
+def test_valor_pago_gerar_diferenca():
+    """#80-EA: valor pago ⇒ gerar_reflexa/gerar_principal = DIFERENCA."""
+    assert "VALOR PAGO ⇒ GERAR = DIFERENÇA" in PROMPT
+    assert "#80-EA" in PROMPT
+
+
+def test_ferias_indenizadas_num_pa_antigo_zera_reflexo():
+    """#80-EB: INDENIZADAS num PA cujo concessivo encerrou antes da dispensa
+    zera o reflexo de férias; PA completo tem 1 ano."""
+    assert "INDENIZADAS num PA antigo ZERA o reflexo de férias (#80-EB" in PROMPT
+    assert "PA completo tem exatamente 1 ano" in PROMPT
+
+
+def test_reflexo_sem_checkbox_manual_com_formula_e_comportamento_media():
+    """#80-EC/#80-ED: reflexo fora de 13º/Férias/Aviso/477/467/RSR é manual
+    com fórmula; principal variável/parcial → MEDIA_PELO_VALOR."""
+    assert "REFLEXO SEM CHECKBOX NO PAINEL = `manual` COM FÓRMULA (#80-EC" in PROMPT
+    assert "MEDIA_PELO_VALOR" in PROMPT and "periodo_media_reflexo" in PROMPT
+
+
+def test_parcelas_semestrais_informado_e_ocorrencia_unica():
+    """#80-EE: PLR/kit → INFORMADO + valores_mensais só nos vencimentos;
+    ocorrência única → período = o mês."""
+    assert "PARCELAS SEMESTRAIS/ANUAIS" in PROMPT and "#80-EE" in PROMPT
+    assert "ocorrência única" in PROMPT.lower() or "OCORRÊNCIA ÚNICA" in PROMPT

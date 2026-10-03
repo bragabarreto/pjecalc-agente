@@ -753,7 +753,10 @@ class ParametrosReflexo(BaseModel):
 
     # Núcleo: comportamento e fórmula
     comportamento_reflexo: Optional[ComportamentoReflexo] = None
-    tratamento_fracao_mes: Optional[Literal["INTEGRALIZAR", "NAO_INTEGRALIZAR"]] = None
+    # #80-ED (0000725-37): período da MÉDIA do reflexo (PJE-Calc
+    # `periodoMediaReflexo`) — ANO_CIVIL p/ 13º, PERIODO_AQUISITIVO p/ férias.
+    periodo_media_reflexo: Optional[Literal["PERIODO_AQUISITIVO", "ANO_CIVIL"]] = None
+    tratamento_fracao_mes: Optional[Literal["INTEGRALIZAR", "NAO_INTEGRALIZAR", "MANTER"]] = None
     outro_valor_divisor: Optional[float] = None
     outro_valor_multiplicador: Optional[float] = None
     # Override de classificação (necessário p/ reflexo manual)

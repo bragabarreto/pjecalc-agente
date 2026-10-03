@@ -265,6 +265,99 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regras obrigatórias — 5 fixes do caso REGINALDO (0000725-37, 03/10/2026) — NÃO REVERTER
+
+> Auditoria sentença → prévia → PJC gerado → PJC definitivo (pergunta do
+> usuário: "o reflexo em férias + 1/3 da diferença salarial CCT 2023/2024 dá
+> sempre zero"). O gerado liquidou **~R$ 280 mil**; o definitivo, R$ 31 mil.
+> Cinco causas, todas estruturais. Testes `test_inv166`–`test_inv170` +
+> `tests/test_prompt_invariants.py` (4 novos).
+
+### 1. Valor pago ⇒ `gerar_reflexa`/`gerar_principal` = DIFERENCA (#80-EA)
+
+A IA emitiu as duas DIFERENÇAS SALARIAIS (piso CCT × salário pago,
+`valor_pago.tipo=CALCULADO`) com `gerar_reflexa=DEVIDO`. "Gerar Reflexa:
+Devido" faz os reflexos incidirem sobre o DEVIDO BRUTO (piso inteiro,
+R$ 2.808,98) em vez da diferença (R$ 195,09): 13º/férias/periculosidade/HE
+saíram ~14× maiores. Normalizer `_norm_gerar_diferenca_com_valor_pago`
+(exceto verbas de DEDUÇÃO — #80-AD) + prompt.
+
+### 2. Férias INDENIZADAS num PA antigo ZERA o reflexo (#80-EB) — a resposta à pergunta
+
+A IA marcou os PAs 2020/21, 2021/22 e 2022/23 como `INDENIZADAS` (usou a
+situação como sinônimo de "deferido", #80-DC). O PJE-Calc apura férias
+INDENIZADAS **na data da rescisão, com a remuneração da rescisão** (CLT art.
+146): a diferença salarial já não existia em 04/2026 → base 0 → reflexo
+R$ 0,00. Comprovado no definitivo: PAs 2020/21 e 2021/22 trocados para
+GOZADAS deram R$ 65,03 + R$ 151,73 (média do PA); o PA 2022/23 ficou
+INDENIZADAS e seguiu zerado "mesmo após várias tentativas". Regra (manual
+§7): concessivo encerrado em/antes da dispensa ⇒ GOZADAS. Normalizer
+`_norm_ferias_situacao_coerente_com_contrato` (ANTES do #80-DC/#80-CY;
+preserva `deferido`; não coage se a sentença fala em férias não gozadas/em
+dobro, se há verba de FÉRIAS cobrindo o PA ou gozo declarado) + corrige PA
+completo para exatamente 1 ano (a IA gravou 26/08/2024→02/04/2026).
+
+### 3. Reflexo sem checkbox no painel = `manual` COM fórmula (#80-EC)
+
+O painel "Exibir" só pré-cadastra 13º / FÉRIAS / AVISO / MULTA 477 / 467 /
+RSR. "ADICIONAL DE PERICULOSIDADE 30% SOBRE DIFERENÇA" e "HORAS EXTRAS SOBRE
+DIFERENÇA" foram emitidos como `checkbox_painel` → 5 tentativas → fallback
+Manual com a fórmula GENÉRICA (div 1 / mult 1 / qtd 1): periculosidade virou
+100% da base (R$ 29.868 em vez de R$ 563). Três defeitos no bot, corrigidos:
+- `_vincular_verba_principal_no_reflexo`: o `includes()` vinculou o REFLEXO
+  "13º SALÁRIO SOBRE DIFERENCA…" como base ("E 13º SALÁRIO" no nome; a base
+  dobrava em dezembro). Agora candidato sem " SOBRE " nunca casa opção com
+  " SOBRE "; verificação por IGUALDADE da célula; antes de re-adicionar,
+  checa se a principal já está na tabela (o PJE-Calc remove a opção incluída).
+- `_criar_reflexo_manual_tentativa`: honra `outro_valor_divisor/multiplicador`
+  do override e deriva o multiplicador do % do nome (30% → 0,3; HE 50% →
+  1,5; divisor 220 para verbas de hora). HE pagas ainda exigem a quantidade
+  mensal dos holerites — 🛑 no log, nunca silencioso.
+- `_configurar_reflexo` (#80-AL): o scan do painel era GLOBAL — a 2ª DIFERENÇA
+  "confirmou" a periculosidade casando o reflexo Manual da 1ª verba e o seu
+  nunca foi criado (fidelidade acusou). Restrito à linha dona
+  (`window.__pjcPrincipalPrefix`).
+Normalizer `_norm_reflexos_sem_checkbox_viram_manual` (DEPOIS do #80-AJ)
+coage antes da prévia; prompt instrui.
+
+### 4. Comportamento do reflexo: MÉDIA para principal variável/parcial (#80-ED)
+
+O Expresso cria o reflexo com Comportamento VALOR MENSAL (lê a principal no
+mês da ocorrência). O calculista trocou os 4 reflexos para MÉDIA PELO VALOR
+(13º: período ANO_CIVIL; férias: PERIODO_AQUISITIVO) — 13º/2022 sobre
+diferença de jan–fev/2022 = R$ 32,52 com média, R$ 0 com valor mensal. O
+override de reflexo checkbox era um STUB ("pular nesta versão MVP"). Agora
+`_aplicar_override_reflexo_checkbox` (sub-fase após o loop, como o #80-DY)
+abre os Parâmetros do reflexo e aplica `comportamento_reflexo`,
+`periodo_media_reflexo` (campo novo no schema), `tratamento_fracao_mes` e
+`incidencias`, com radios verificados, save verificado, Cancelar em recusa e
+Regerar Manter. Prompt instrui MEDIA_PELO_VALOR para HE/variáveis/parciais.
+
+### 5. Fase 5 (ocorrências INFORMADO) abortou em 5/5 verbas (#80-EE)
+
+Dump `pre_click`: o modal `formulario:msgAguardeContainer` ("Processando…")
+ainda VISÍVEL após o Regerar SOBRESCREVER proativo — o bot só olhava
+`formulario:msgAguarde` — e o click no linkOcorrencias colidiu com o lock
+(HTTP 500; "NENHUMA das 4 strategies"). Resultado: Kit Natalino 32 ×
+R$ 336,58 e cada multa normativa × N meses (R$ 55 mil a maior). Fixes:
+(a) Regerar proativo só para verba Expresso com DESLIGAMENTO/período curto
+(as 5 eram Manual/MENSAL — regra da seção "Regerar Ocorrências", ponto 2);
+(b) espera do `msgAguardeContainer` + gate #80-H antes do click; (c)
+`valor_pago` mensal dos `valores_mensais` vai no input `valorPago` da linha
+(deduções da PLR eram descartadas); (d) normalizer
+`_norm_informado_ocorrencia_unica_periodo_mes`: INFORMADO + MENSAL + um único
+mês em `valores_mensais` ⇒ período = o mês (o PJE-Calc gera 1 ocorrência sem
+depender da grade). Prompt: parcela semestral/anual = INFORMADO +
+`valores_mensais` só nos vencimentos, nunca CALCULADO MENSAL (PLR 40% ×
+60 meses = R$ 74 mil).
+
+> Ainda em aberto neste caso (ajustes do calculista, não do app): PLR com
+> deduções zeradas e 1º sem/2021 incluído; HE 2023/2024 com o 13º somado na
+> base; periculosidade 2021/2023 e HE sem incidências; 13º sobre diferença
+> sem FGTS. Ver relatório da sessão de 03/10/2026.
+
+---
+
 ## Regra obrigatória — Click no sidebar espera o NOVO documento (#80-DX)
 
 > **`_navegar_menu_via_click` só devolve o controle depois que o documento

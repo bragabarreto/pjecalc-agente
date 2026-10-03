@@ -481,6 +481,27 @@ gozadas) com "férias PROPORCIONAIS" (indevidas na justa causa).
 **Default para verbas**: `null` (não preencher; PJE-Calc gera ocorrências automáticas via Período + Ocorrência).
 **Default para cartão**: `[]` (lista vazia) ou lista de dias específicos.
 
+⚠️ **PARCELAS SEMESTRAIS/ANUAIS (PLR, kit natalino, cesta de fim de ano) e
+VERBAS DE OCORRÊNCIA ÚNICA (multa normativa) — #80-EE (NÃO REVERTER)**:
+- Verba paga **por semestre/ano** com valor fixado pela sentença → `valor:
+  "INFORMADO"` + `ocorrencias_override.valores_mensais` com **apenas os meses
+  de vencimento** (`valor_devido` = o valor daquele mês, `valor_pago` = o que
+  foi comprovadamente pago naquela competência). Os meses não listados saem
+  ZERADOS. **NUNCA** `valor: "CALCULADO"` com `ocorrencia_pagamento: "MENSAL"`
+  para parcela semestral — o PJE-Calc gera o valor **todo mês** (PLR 40% do
+  salário × 60 meses = R$ 74 mil no 0000725-37, contra R$ 14 mil devidos).
+  `valor_devido: 0` em `valores_mensais` significa ZERO naquele mês — não
+  "manter o calculado".
+- PLR semestral de 40% do salário-base: `valor_devido` de cada semestre = 0,40
+  × salário-base vigente no mês de vencimento; **só os semestres deferidos**
+  (não inclua o semestre anterior ao marco prescricional); proporcional = o
+  valor × meses/6 (nunca "dividir" por 0,66 — o divisor multiplica o valor).
+- Verba de **ocorrência única** (multa normativa, indenização fixa): o
+  `periodo_inicio/fim` é o PRÓPRIO MÊS da ocorrência (01 ao último dia) — o
+  PJE-Calc gera uma ocorrência só. Período = vigência da norma gerava uma
+  ocorrência POR MÊS com o valor cheio (4 multas → R$ 61 mil em vez de
+  R$ 6,5 mil). (O normalizer restringe o período como salvaguarda.)
+
 ## 4.1 ESTRATÉGIA DE PREENCHIMENTO
 
 Para cada verba, classificar em uma de 3 estratégias:
@@ -1194,6 +1215,17 @@ O esquema espelha **integralmente** a página `verba-calculo.jsf` (Cálculo > Ve
 - `parametros.tipo`: `PRINCIPAL` (verbas principais) ou `REFLEXO` (reflexos manuais)
 - `parametros.gerar_reflexa`: `DIFERENCA` (default) ou `DEVIDO` — sobre o que os reflexos incidirão
 - `parametros.gerar_principal`: `DIFERENCA` (default) ou `DEVIDO`
+
+⚠️ **REGRA CRÍTICA — VALOR PAGO ⇒ GERAR = DIFERENÇA (INVARIANTE PERMANENTE — NÃO REVERTER, #80-EA)**:
+Sempre que a verba carrega um valor pago a abater — `valor_pago.tipo:
+"CALCULADO"` (histórico do salário pago) ou `INFORMADO` com `valor_brl > 0` —
+emita **`gerar_reflexa: "DIFERENCA"` e `gerar_principal: "DIFERENCA"`**. Com
+`DEVIDO`, o PJE-Calc faz os reflexos incidirem sobre o **devido BRUTO** (o
+piso/paradigma inteiro), não sobre a diferença. Caso 0000725-37: DIFERENÇA
+SALARIAL piso CCT (R$ 2.808,98) × salário pago (R$ 2.613,89) com `DEVIDO` →
+13º/férias/periculosidade/HE calculados sobre R$ 2.808,98 em vez de R$ 195,09;
+liquidou R$ 280 mil contra R$ 31 mil. Sem valor pago, DEVIDO ≡ DIFERENÇA.
+(O normalizer também coage como salvaguarda.)
 - `parametros.compor_principal`: true (default) ou false — incluir no Bruto Devido?
 - `parametros.zerar_valor_negativo`: false (default) ou true
 
@@ -1403,6 +1435,36 @@ Duas armadilhas a EVITAR (bug RODRIGO ROCHA 0000905-05):
    `fgts.incidencia: "SOBRE_O_TOTAL_DEVIDO"` (default) — não crie reflexo.
 (O normalizer também saneia isso como salvaguarda — remove o parêntese e o
 reflexo FGTS de verba in-contrato.)
+
+⚠️ **REGRA CRÍTICA — REFLEXO SEM CHECKBOX NO PAINEL = `manual` COM FÓRMULA (#80-EC — NÃO REVERTER)**:
+O painel "Exibir" só pré-cadastra reflexos dos tipos **13º SALÁRIO, FÉRIAS +
+1/3, AVISO PRÉVIO, MULTA 477, MULTA 467 e RSR**. Qualquer outro tipo de reflexo
+deferido — **ADICIONAL DE PERICULOSIDADE 30% sobre diferença salarial, HORAS
+EXTRAS pagas sobre diferença, ADICIONAL NOTURNO sobre diferença** — NÃO tem
+checkbox e DEVE ser `estrategia_reflexa: "manual"` com `parametros_override`
+completo: `outro_valor_multiplicador` = o percentual (periculosidade 30% →
+`0.30`; HE 50% → `1.5`), `outro_valor_divisor` (`1` para adicionais sobre o
+mês; `220` para verbas de hora), `caracteristica: "COMUM"`,
+`ocorrencia_pagamento: "MENSAL"`, `incidencias` e `periodo_inicio/fim` = os da
+principal. Caso 0000725-37: emitidos como `checkbox_painel`, caíram no
+fallback do bot com divisor 1 / multiplicador 1 — a periculosidade virou
+100% da base (R$ 29.868 em vez de R$ 563). Para HE pagas, informe a quantidade
+mensal de horas dos holerites em `ocorrencias_override.valores_mensais[].quantidade`
+e avise em `comentarios` (o bot lança quantidade 1 e sinaliza para ajuste).
+(O normalizer também coage como salvaguarda.)
+
+⚠️ **COMPORTAMENTO DO REFLEXO: MÉDIA para principal variável ou parcial (#80-ED)**:
+O reflexo criado pelo Expresso nasce com Comportamento **VALOR MENSAL** — a
+ocorrência do 13º/férias lê o valor da principal **no mês da ocorrência**
+(dezembro / mês do gozo). Isso só é correto para principal CONSTANTE o ano
+inteiro. Quando a principal é **variável** (HE, adicional noturno, comissões —
+Súmula 347 TST) ou **parcial no ano** (diferença salarial limitada a alguns
+meses), emita nos reflexos de 13º e férias:
+`parametros_override: {"comportamento_reflexo": "MEDIA_PELO_VALOR",
+"periodo_media_reflexo": "ANO_CIVIL"}` (13º) / `"PERIODO_AQUISITIVO"` (férias).
+Caso 0000725-37: 13º/2022 sobre diferença de jan–fev/2022 = R$ 32,52 com
+média, R$ 0 com valor mensal (dezembro/2022 não tinha diferença). O bot aplica
+esses overrides abrindo os Parâmetros do reflexo após o save da principal.
 
 ⚠️ **REGRA CRÍTICA — REFLEXOS DE VERBA PÓS-CONTRATUAL (INVARIANTE PERMANENTE — NÃO REVERTER)**:
 Para verba cujo período é POSTERIOR à demissão (indenização substitutiva de
@@ -1744,6 +1806,21 @@ Situação SUGERIDA pelo manual (confira contra a sentença e a defesa):
 - `GOZADAS` — o período concessivo termina EM ou ANTES do desligamento
 - `INDENIZADAS` — o concessivo termina DEPOIS do desligamento (inclui o
   proporcional final)
+
+⚠️ **INDENIZADAS num PA antigo ZERA o reflexo de férias (#80-EB — NÃO REVERTER).**
+Não use `situacao=INDENIZADAS` como sinônimo de "deferido". O PJE-Calc apura
+as férias **INDENIZADAS na data da RESCISÃO**, com a remuneração daquele dia
+(CLT art. 146). Um reflexo de verba já extinta nessa data (diferença salarial
+limitada a 2021–2023, HE de anos anteriores) sai **R$ 0,00**. Caso
+0000725-37: "reflexos em férias + 1/3 dos PAs 2020/21, 2021/22 e 2022/23" com
+os três marcados INDENIZADAS → os três reflexos zerados; com GOZADAS (a
+sugestão do próprio PJE-Calc, concessivo encerrado antes da dispensa) o
+reflexo é a média do PA e aparece. Regra: PA cujo concessivo terminou
+em/antes da dispensa é `GOZADAS` (+ `deferido=true` quando a condenação o
+alcança); `INDENIZADAS` só para o concessivo em curso na dispensa, ou quando a
+sentença diz expressamente que as férias NÃO foram gozadas / são devidas em
+dobro. **PA completo tem exatamente 1 ano** (`fim = início + 1 ano − 1 dia`);
+só o ÚLTIMO, proporcional, termina na dispensa.
 
 **Período CONCESSIVO ≠ período de GOZO (#80-DZ):** o concessivo é DERIVADO
 pelo PJE-Calc (os 12 meses seguintes ao aquisitivo) — nunca coloque nele as

@@ -5709,3 +5709,209 @@ def test_inv165_gozo_declarado_no_concessivo_vai_para_gozo_1():
     assert b["gozo_1"] is None, "concessivo real (1 ano) não pode virar gozo"
     ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "Período CONCESSIVO ≠ período de GOZO (#80-DZ)" in ext
+
+
+# ─── Caso REGINALDO 0000725-37 (03/10/2026) — #80-EA..EE ───────────────────
+
+
+def test_inv166_gerar_diferenca_quando_ha_valor_pago():
+    """#80-EA: valor_pago CALCULADO (ou INFORMADO > 0) ⇒ gerar_reflexa e
+    gerar_principal = DIFERENCA. Com DEVIDO os reflexos incidiam sobre o piso
+    inteiro (R$ 2.808,98) em vez da diferença (R$ 195,09) — R$ 280 mil."""
+    from modules.json_normalizer import _norm_gerar_diferenca_com_valor_pago as f
+    d = {"verbas_principais": [
+        {"nome_pjecalc": "DIFERENCA SALARIAL - CCT", "expresso_alvo": "DIFERENÇA SALARIAL",
+         "parametros": {"gerar_reflexa": "DEVIDO", "gerar_principal": "DEVIDO",
+                        "valor_pago": {"tipo": "CALCULADO", "valor_brl": 0.0}}},
+        {"nome_pjecalc": "HORAS EXTRAS 50%", "expresso_alvo": "HORAS EXTRAS 50%",
+         "parametros": {"gerar_reflexa": "DEVIDO", "gerar_principal": "DEVIDO",
+                        "valor_pago": {"tipo": "INFORMADO", "valor_brl": 0.0}}},
+        {"nome_pjecalc": "VALOR PAGO - TRIBUTÁVEL", "expresso_alvo": "VALOR PAGO - TRIBUTÁVEL",
+         "parametros": {"gerar_reflexa": "DEVIDO", "gerar_principal": "DEVIDO",
+                        "valor_pago": {"tipo": "INFORMADO", "valor_brl": 500.0}}},
+        {"nome_pjecalc": "SALÁRIO RETIDO", "expresso_alvo": "SALÁRIO RETIDO",
+         "parametros": {"gerar_reflexa": "DEVIDO", "gerar_principal": "DEVIDO",
+                        "valor_pago": {"tipo": "INFORMADO", "valor_brl": 300.0}}},
+    ]}
+    f(d)
+    v = d["verbas_principais"]
+    assert v[0]["parametros"]["gerar_reflexa"] == "DIFERENCA" and v[0]["parametros"]["gerar_principal"] == "DIFERENCA"
+    assert v[1]["parametros"]["gerar_reflexa"] == "DEVIDO", "sem valor pago, DEVIDO ≡ DIFERENÇA — não tocar"
+    assert v[2]["parametros"]["gerar_reflexa"] == "DEVIDO", "verba de DEDUÇÃO preserva o default (#80-AD)"
+    assert v[3]["parametros"]["gerar_reflexa"] == "DIFERENCA" and v[3]["parametros"]["gerar_principal"] == "DIFERENCA"
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "_norm_gerar_diferenca_com_valor_pago(data)" in src
+
+
+def test_inv167_ferias_pa_concessivo_encerrado_antes_da_dispensa_e_gozadas():
+    """#80-EB: INDENIZADAS num PA cujo concessivo terminou antes da dispensa
+    zera o reflexo de férias (o PJE-Calc apura na rescisão). Coage GOZADAS
+    preservando `deferido`; PA completo passa a ter 1 ano; guardas: sentença
+    fala em férias não gozadas / verba de FÉRIAS cobre o PA / gozo declarado."""
+    from modules.json_normalizer import _norm_ferias_situacao_coerente_com_contrato as f
+
+    def _base():
+        return {
+            "parametros_calculo": {"data_admissao": "26/08/2020", "data_demissao": "02/04/2026"},
+            "verbas_principais": [],
+            "ferias": {"periodos": [
+                {"periodo_aquisitivo_inicio": "26/08/2020", "periodo_aquisitivo_fim": "25/08/2021",
+                 "periodo_concessivo_inicio": "26/08/2021", "periodo_concessivo_fim": "25/08/2022",
+                 "situacao": "INDENIZADAS", "deferido": True, "gozo_1": None, "dobra": False},
+                {"periodo_aquisitivo_inicio": "26/08/2022", "periodo_aquisitivo_fim": "25/08/2023",
+                 "periodo_concessivo_inicio": "26/08/2023", "periodo_concessivo_fim": "25/08/2024",
+                 "situacao": "INDENIZADAS", "deferido": None, "gozo_1": None, "dobra": False},
+                {"periodo_aquisitivo_inicio": "26/08/2024", "periodo_aquisitivo_fim": "02/04/2026",
+                 "situacao": "INDENIZADAS", "deferido": False, "gozo_1": None, "dobra": False},
+                {"periodo_aquisitivo_inicio": "26/08/2025", "periodo_aquisitivo_fim": "02/04/2026",
+                 "situacao": "INDENIZADAS", "deferido": False, "gozo_1": None, "dobra": False},
+            ]},
+        }
+
+    d = _base()
+    f(d)
+    pas = d["ferias"]["periodos"]
+    assert pas[0]["situacao"] == "GOZADAS" and pas[0]["deferido"] is True
+    assert pas[1]["situacao"] == "GOZADAS" and pas[1]["deferido"] is True, (
+        "deferido=None resolve ANTES de mudar o fato (senão GOZADAS viraria não-deferido)")
+    assert pas[2]["periodo_aquisitivo_fim"] == "25/08/2025", "PA completo tem exatamente 1 ano"
+    assert pas[2]["periodo_concessivo_fim"] == "25/08/2026"
+    assert pas[2]["situacao"] == "INDENIZADAS", "concessivo em curso na dispensa segue INDENIZADAS"
+    assert pas[3]["situacao"] == "INDENIZADAS", "proporcional não é tocado"
+
+    d = _base()
+    f(d, sentenca_texto="Condeno ao pagamento das férias vencidas 2020/2021 não gozadas, em dobro.")
+    assert d["ferias"]["periodos"][0]["situacao"] == "INDENIZADAS", "sentença fala em férias não gozadas — não coagir"
+
+    d = _base()
+    d["verbas_principais"] = [{"nome_pjecalc": "FÉRIAS + 1/3", "expresso_alvo": "FÉRIAS + 1/3",
+                               "parametros": {"periodo_inicio": "26/08/2020", "periodo_fim": "25/08/2021"}}]
+    f(d)
+    assert d["ferias"]["periodos"][0]["situacao"] == "INDENIZADAS", "verba de FÉRIAS cobre o PA — não coagir"
+    assert d["ferias"]["periodos"][1]["situacao"] == "GOZADAS"
+
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    pipe = src.split("def normalize_v2_json(")[1]
+    assert pipe.find("_norm_ferias_situacao_coerente_com_contrato(data") < pipe.find(
+        "_norm_ferias_completar_periodos_do_contrato(data)"), "#80-EB roda ANTES do #80-DC/#80-CY"
+
+
+def test_inv168_reflexo_sem_checkbox_expresso_vira_manual_com_formula():
+    """#80-EC: periculosidade/HE SOBRE diferença não têm checkbox no painel;
+    viram `manual` com multiplicador pelo % do nome (0,3 / 1,5), divisor 1 ou
+    220, COMUM/MENSAL, período e incidências da principal. 13º/Férias/Aviso/
+    477/467/RSR continuam checkbox_painel."""
+    from modules.json_normalizer import _norm_reflexos_sem_checkbox_viram_manual as f
+    inc = {"irpf": True, "cs_inss": True, "fgts": True, "previdencia_privada": False, "pensao_alimenticia": False}
+    d = {"verbas_principais": [{
+        "nome_pjecalc": "DIFERENCA SALARIAL - CCT", "expresso_alvo": "DIFERENÇA SALARIAL",
+        "parametros": {"periodo_inicio": "13/05/2021", "periodo_fim": "28/02/2022", "incidencias": inc},
+        "reflexos": [
+            {"nome": "Periculosidade", "estrategia_reflexa": "checkbox_painel",
+             "expresso_reflex_alvo": "ADICIONAL DE PERICULOSIDADE 30% SOBRE DIFERENCA SALARIAL",
+             "parametros_override": {"caracteristica": None, "outro_valor_multiplicador": None}},
+            {"nome": "HE", "estrategia_reflexa": "checkbox_painel",
+             "expresso_reflex_alvo": "HORAS EXTRAS 50% SOBRE DIFERENCA SALARIAL", "parametros_override": None},
+            {"nome": "13", "estrategia_reflexa": "checkbox_painel",
+             "expresso_reflex_alvo": "13 SALARIO SOBRE DIFERENCA SALARIAL", "parametros_override": None},
+            {"nome": "Férias", "estrategia_reflexa": "checkbox_painel",
+             "expresso_reflex_alvo": "FÉRIAS + 1/3 SOBRE DIFERENCA SALARIAL", "parametros_override": None},
+            {"nome": "RSR", "estrategia_reflexa": "checkbox_painel",
+             "expresso_reflex_alvo": "REPOUSO SEMANAL REMUNERADO E FERIADOS SOBRE HORAS EXTRAS 50%",
+             "parametros_override": None},
+        ]}]}
+    f(d)
+    r = d["verbas_principais"][0]["reflexos"]
+    assert r[0]["estrategia_reflexa"] == "manual"
+    ov = r[0]["parametros_override"]
+    assert ov["outro_valor_multiplicador"] == 0.3 and ov["outro_valor_divisor"] == 1.0
+    assert ov["caracteristica"] == "COMUM" and ov["ocorrencia_pagamento"] == "MENSAL"
+    assert ov["periodo_inicio"] == "13/05/2021" and ov["periodo_fim"] == "28/02/2022"
+    assert ov["incidencias"]["fgts"] is True
+    assert r[1]["estrategia_reflexa"] == "manual"
+    assert r[1]["parametros_override"]["outro_valor_multiplicador"] == 1.5
+    assert r[1]["parametros_override"]["outro_valor_divisor"] == 220.0
+    assert "QUANTIDADE" in r[1]["parametros_override"]["comentarios"]
+    for i in (2, 3, 4):
+        assert r[i]["estrategia_reflexa"] == "checkbox_painel", r[i]["nome"]
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    pipe = src.split("def normalize_v2_json(")[1]
+    assert pipe.find("_norm_reflexos_expresso_saneados(data)") < pipe.find(
+        "_norm_reflexos_sem_checkbox_viram_manual(data)"), "#80-EC roda DEPOIS do #80-AJ"
+
+
+def test_inv169_informado_ocorrencia_unica_restringe_periodo_ao_mes():
+    """#80-EE: INFORMADO + MENSAL + valores_mensais com UM mês ⇒ período = o
+    mês (o PJE-Calc gera 1 ocorrência; antes gerava uma por mês do período:
+    10 × R$ 1.419,53 na multa normativa). Multi-mês (kit natalino) não muda."""
+    from modules.json_normalizer import _norm_informado_ocorrencia_unica_periodo_mes as f
+    d = {"verbas_principais": [
+        {"nome_pjecalc": "MULTA NORMATIVA PLR - CCT 2021/2023",
+         "parametros": {"valor": "INFORMADO", "ocorrencia_pagamento": "MENSAL",
+                        "periodo_inicio": "13/05/2021", "periodo_fim": "28/02/2022",
+                        "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 1419.53}},
+         "ocorrencias_override": {"modo": "valores_mensais",
+                                  "valores_mensais": [{"mes": "02/2022", "valor_devido": 1419.53, "valor_pago": 0.0}]}},
+        {"nome_pjecalc": "MULTA NORMATIVA PLR - ACT 2025/2026",
+         "parametros": {"valor": "INFORMADO", "ocorrencia_pagamento": "MENSAL",
+                        "periodo_inicio": "01/04/2025", "periodo_fim": "02/04/2026",
+                        "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 1833.27}},
+         "ocorrencias_override": {"modo": "valores_mensais",
+                                  "valores_mensais": [{"mes": "04/2026", "valor_devido": 1833.27}]}},
+        {"nome_pjecalc": "KIT NATALINO",
+         "parametros": {"valor": "INFORMADO", "ocorrencia_pagamento": "MENSAL",
+                        "periodo_inicio": "13/05/2021", "periodo_fim": "31/12/2023",
+                        "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 336.58}},
+         "ocorrencias_override": {"modo": "valores_mensais", "valores_mensais": [
+             {"mes": "12/2021", "valor_devido": 336.58}, {"mes": "12/2022", "valor_devido": 577.0},
+             {"mes": "12/2023", "valor_devido": 650.0}]}},
+        {"nome_pjecalc": "INDENIZAÇÃO POR DANO MORAL",
+         "parametros": {"valor": "INFORMADO", "ocorrencia_pagamento": "DESLIGAMENTO",
+                        "periodo_inicio": "01/04/2026", "periodo_fim": "02/04/2026",
+                        "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 5000.0}},
+         "ocorrencias_override": {"modo": "valores_mensais", "valores_mensais": [{"mes": "04/2026", "valor_devido": 5000.0}]}},
+    ]}
+    f(d)
+    v = d["verbas_principais"]
+    assert (v[0]["parametros"]["periodo_inicio"], v[0]["parametros"]["periodo_fim"]) == ("01/02/2022", "28/02/2022")
+    assert (v[1]["parametros"]["periodo_inicio"], v[1]["parametros"]["periodo_fim"]) == ("01/04/2026", "02/04/2026"), \
+        "clamp ao fim da verba (dispensa 02/04) quando cai dentro do mês"
+    assert (v[2]["parametros"]["periodo_inicio"], v[2]["parametros"]["periodo_fim"]) == ("13/05/2021", "31/12/2023"), \
+        "3 meses distintos — período preservado"
+    assert v[3]["parametros"]["periodo_inicio"] == "01/04/2026", "DESLIGAMENTO não é tocado"
+
+
+def test_inv170_bot_vinculo_exato_painel_por_linha_proativo_condicional_override_reflexo():
+    """Bot (0000725-37): (a) o vínculo da principal no reflexo Manual nunca
+    casa opção com ' SOBRE ' (um reflexo) e confirma por IGUALDADE da célula —
+    o includes() ligou o 13º como base ('E 13º SALÁRIO', periculosidade dobrou
+    em dezembro); (b) a fórmula do reflexo Manual honra o override e deriva o
+    multiplicador do % do nome; (c) o painel de reflexos é restrito à LINHA
+    da principal; (d) o Regerar proativo da Fase 5 é condicional e há gate no
+    msgAguardeContainer; (e) overrides de reflexo checkbox são aplicados na
+    sub-fase #80-ED (não mais um stub)."""
+    pw = PLAYWRIGHT_V2
+    vinc = pw.split("def _vincular_verba_principal_no_reflexo")[1].split("\n    def ")[0]
+    assert "if (t.includes(' SOBRE ') && !c.includes(' SOBRE ')) continue;" in vinc
+    assert "tds.some(t => cs.includes(t))" in vinc, "verificação por igualdade da célula removida"
+    assert "return links.length > 0;" not in vinc, "fallback 'qualquer linha' voltou (falso-positivo)"
+    assert "_principal_ja_vinculada()" in vinc
+    tent = pw.split("def _criar_reflexo_manual_tentativa")[1].split("\n    def ")[0]
+    assert "outro_valor_multiplicador" in tent and "outro_valor_divisor" in tent
+    assert '"PERICULOSIDADE" in _tipo_r' in tent and '_mult = 0.3' in tent
+    assert 'divisor = "220" if _eh_hora else "1"' in tent
+    cfg = pw.split("def _configurar_reflexo(self, verba_principal, reflexo, coletar_manual_em=None)")[1].split("\n    def ")[0]
+    assert "window.__pjcPrincipalPrefix" in cfg and "cb.id.startsWith(pfx)" in cfg
+    assert "Implementação detalhada via doc 07 — pular nesta versão MVP" not in cfg
+    assert "_reflexo_override_aplicavel(reflexo)" in cfg
+    f5 = pw.split("def _configurar_ocorrencias_informado_inline")[1].split("\n    def ")[0]
+    assert "_precisa_proativo" in f5 and "self._verba_periodo_curto(v)" in f5
+    assert "formulario:msgAguardeContainer" in f5
+    assert '_aguardar_servidor_ocioso(contexto="#80-EE pré-linkOcorrencias")' in f5
+    assert "mes_to_pago" in f5 and "':valorPago'" in f5
+    assert "def _aplicar_override_reflexo_checkbox" in pw
+    ov = pw.split("def _aplicar_override_reflexo_checkbox")[1].split("\n    def ")[0]
+    assert '_marcar_radio_verificado("comportamentoDoReflexo"' in ov
+    assert '_clicar("cancelar"' in ov, "save recusado deve cancelar o form (#80-DY)"
+    fv = pw.split("def fase_verbas")[1].split("\n    def ")[0]
+    assert "self._aplicar_override_reflexo_checkbox(v, r)" in fv

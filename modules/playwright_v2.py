@@ -3168,6 +3168,18 @@ class PlaywrightAutomatorV2:
             except Exception as _e:
                 self.log(f"  ⚠ ajuste fino reflexo 13º: {_e}")
 
+        # ── Sub-fase #80-ED: overrides de reflexos CHECKBOX (comportamento
+        # MÉDIA / período da média / fração de mês / incidências) ──────────
+        # Também após o loop (mesma razão do v12). Antes era um stub "MVP"
+        # que só logava "Aplicando overrides" e não fazia nada.
+        for v in list(getattr(self.previa, "verbas_principais", None) or []):
+            for r in list(getattr(v, "reflexos", None) or []):
+                try:
+                    if self._reflexo_override_aplicavel(r):
+                        self._aplicar_override_reflexo_checkbox(v, r)
+                except Exception as _e:
+                    self.log(f"  ⚠ #80-ED override do reflexo '{getattr(r, 'nome', '?')}': {_e}")
+
         # CRÍTICO (descoberto 12/05/2026 via diagnóstico de pendências):
         # após alterar parâmetros das verbas, é OBRIGATÓRIO clicar "Regerar"
         # na LISTAGEM (botão regerarOcorrencias com rendered=emModoListagem).
@@ -3881,15 +3893,31 @@ class PlaywrightAutomatorV2:
         #
         # sobrescrever=True para descartar ocorrências antigas (fora do
         # período curto) e gerar novas dentro do range.
-        try:
-            ok_regerar = self._regerar_com_modal_confirmacao(
-                sobrescrever=True,
-                log_prefix="    ",
-            )
-            if ok_regerar:
-                self.log(f"    ✓ Regerar Ocorrências proativo (pré linkOcorrencias)")
-        except Exception as _e:
-            self.log(f"    ⚠ Regerar proativo: {_e}")
+        # #80-EE (0000725-37): o Regerar SOBRESCREVER proativo só faz sentido
+        # para verba lançada pelo Expresso (ocorrências default do contrato
+        # inteiro) com DESLIGAMENTO ou período curto. Nas 5 verbas Manual
+        # (Kit Natalino + 4 multas normativas, MENSAL, período já certo desde
+        # o T0) ele disparava o Drools e o click no linkOcorrencias logo em
+        # seguida colidia com o lock (HTTP 500 — "NENHUMA das 4 strategies
+        # navegou") → nenhum valor mensal aplicado em 5/5 verbas.
+        _estrat_v = getattr(v, "estrategia_preenchimento", None)
+        _estrat_v = getattr(_estrat_v, "value", _estrat_v)
+        _ocorr_v = str(getattr(v.parametros, "ocorrencia_pagamento", "") or "").upper()
+        _precisa_proativo = (str(_estrat_v or "").lower() != "manual") and (
+            "DESLIGAMENTO" in _ocorr_v or self._verba_periodo_curto(v)
+        )
+        if _precisa_proativo:
+            try:
+                ok_regerar = self._regerar_com_modal_confirmacao(
+                    sobrescrever=True,
+                    log_prefix="    ",
+                )
+                if ok_regerar:
+                    self.log(f"    ✓ Regerar Ocorrências proativo (pré linkOcorrencias)")
+            except Exception as _e:
+                self.log(f"    ⚠ Regerar proativo: {_e}")
+        else:
+            self.log("    ℹ #80-EE Regerar proativo dispensado (verba Manual/MENSAL com período próprio)")
 
         # FORENSE (25/05/2026 v2): dump DOM ANTES de clicar linkOcorrencias —
         # capturar estado real da listagem após PROATIVO Regerar.
@@ -3929,6 +3957,22 @@ class PlaywrightAutomatorV2:
             )
         except Exception:
             self.log(f"    ⚠ msgAguarde ainda visível após 15s — prosseguindo mesmo assim")
+        # #80-EE: o dump pre_click do 0000725-37 mostrou o modal
+        # `formulario:msgAguardeContainer` ("Processando...") AINDA VISÍVEL —
+        # o wait acima só olha `formulario:msgAguarde`. Esperar o container
+        # sumir + servidor ocioso (#80-H) antes de clicar.
+        try:
+            self._page.wait_for_function(
+                """() => {
+                    const m = document.getElementById('formulario:msgAguardeContainer');
+                    return !m || m.offsetParent === null
+                        || window.getComputedStyle(m).display === 'none';
+                }""",
+                timeout=60000,
+            )
+        except Exception:
+            self.log("    ⚠ msgAguardeContainer ainda visível após 60s — prosseguindo")
+        self._aguardar_servidor_ocioso(contexto="#80-EE pré-linkOcorrencias")
 
         # Clicar linkOcorrencias usando MATCH EXATO POR TD + NATIVE Playwright click.
         # HISTÓRICO 25/05/2026:
@@ -4254,6 +4298,8 @@ class PlaywrightAutomatorV2:
         # ocorrência do mês correspondente (casado por dataInicial da linha), em
         # vez de jogar o total na 1ª linha (que produzia valor errado por mês).
         mes_to_valor = None
+        mes_to_pago: dict = {}
+        meses_usados: list = []
         ov = getattr(v, "ocorrencias_override", None)
         if ov is not None and getattr(ov, "modo", None) == "valores_mensais":
             vms = getattr(ov, "valores_mensais", None) or []
@@ -4262,6 +4308,15 @@ class PlaywrightAutomatorV2:
                 for o in vms:
                     try:
                         mes_to_valor[str(o.mes).strip()] = float(o.valor_devido or 0)
+                    except Exception:
+                        pass
+                    # #80-EE: valor PAGO do mês (deduções autorizadas — PLR
+                    # 0000725-37: R$ 1.279,14 em 02/2025 etc.) vai no input
+                    # valorPago da mesma linha; antes era descartado.
+                    try:
+                        _pg = float(getattr(o, "valor_pago", 0) or 0)
+                        if _pg > 0:
+                            mes_to_pago[str(o.mes).strip()] = _pg
                     except Exception:
                         pass
 
@@ -4348,6 +4403,24 @@ class PlaywrightAutomatorV2:
                     }""",
                     [el_id, val_br],
                 )
+                # #80-EE: valor PAGO da linha (se a prévia o informou)
+                _mes_i = meses_usados[i] if i < len(meses_usados) else ""
+                if _mes_i and mes_to_pago.get(_mes_i):
+                    _pago_br = _fmt_br(mes_to_pago[_mes_i])
+                    _ok_pg = self._page.evaluate(
+                        """([id, valor]) => {
+                            const el = document.getElementById(id.replace(/:valorDevido$/, ':valorPago'));
+                            if (!el) return false;
+                            el.value = valor;
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('blur', {bubbles: true}));
+                            return true;
+                        }""",
+                        [el_id, _pago_br],
+                    )
+                    self.log(f"      {'✓' if _ok_pg else '⚠'} valorPago[{_mes_i}] = {_pago_br}"
+                             + ("" if _ok_pg else " — input valorPago não encontrado na linha"))
             except Exception as e:
                 self.log(f"      ⚠ valorDevido[{i}] = {val_br}: {e}")
         self._aguardar_ajax(3000)
@@ -8243,6 +8316,29 @@ class PlaywrightAutomatorV2:
             candidatos.append(_ea)
         # nomes persistidos podem estar truncados a 50 (#80-O)
         candidatos += [c[:50].strip() for c in list(candidatos)]
+        def _principal_ja_vinculada() -> bool:
+            # #80-EC: a tabela do mini-crud (linhas com excluirItem) já tem a
+            # principal? Comparar a CÉLULA inteira (igualdade normalizada), não
+            # includes() — a linha do reflexo "13º SOBRE <principal>" contém o
+            # nome da principal e dava falso-positivo.
+            try:
+                return bool(self._page.evaluate(
+                    """(cands) => {
+                        const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                        const cs = cands.map(norm).filter(Boolean);
+                        for (const a of document.querySelectorAll("[id*='excluirItem']")) {
+                            const tr = a.closest('tr');
+                            if (!tr) continue;
+                            const tds = [...tr.querySelectorAll('td')].map(td => norm(td.textContent));
+                            if (tds.some(t => cs.includes(t))) return true;
+                        }
+                        return false;
+                    }""",
+                    candidatos,
+                ))
+            except Exception:
+                return False
+
         for tent in range(1, 4):
             try:
                 self._page.wait_for_selector(
@@ -8252,6 +8348,12 @@ class PlaywrightAutomatorV2:
                 self.log(f"    ⚠ select baseVerbaDeCalculo não renderizou (tent {tent}/3)")
                 self._aguardar_ajax(3000)
                 continue
+            # #80-EC: a tentativa anterior pode ter vinculado sem que a
+            # verificação visse — re-adicionar vinculava OUTRA opção (o
+            # PJE-Calc remove da lista a verba já incluída).
+            if tent > 1 and _principal_ja_vinculada():
+                self.log("    ✓ verba principal JÁ vinculada ao reflexo (tabela do bean) — sem novo add")
+                return True
             # Localizar a opção cujo label casa com a principal (só lookup em JS)
             opt_info = self._page.evaluate(
                 """(cands) => {
@@ -8270,6 +8372,13 @@ class PlaywrightAutomatorV2:
                         const t = norm(opt.textContent);
                         if (!t) continue;
                         for (const c of cs) {
+                            // #80-EC (0000725-37): a opção "13º SALÁRIO SOBRE
+                            // DIFERENCA SALARIAL - CCT 2021/2023" CONTÉM o nome
+                            // da principal — o includes() vinculava o REFLEXO
+                            // como base ("E 13º SALÁRIO" no nome; periculosidade
+                            // dobrou em dezembro). Candidato sem " SOBRE " nunca
+                            // casa opção com " SOBRE " (um reflexo).
+                            if (t.includes(' SOBRE ') && !c.includes(' SOBRE ')) continue;
                             let score = null;
                             if (t === c) score = 0;
                             else if (t.startsWith(c) || c.startsWith(t))
@@ -8362,21 +8471,28 @@ class PlaywrightAutomatorV2:
                 pass
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1000)
-            # VERIFICAR: a lista re-renderizada (bean) deve conter a principal
+            # VERIFICAR: a lista re-renderizada (bean) deve conter a principal.
+            # #80-EC: igualdade da CÉLULA (não includes do <tr>) — a linha do
+            # reflexo "13º SOBRE <principal>" contém o nome e confirmava um
+            # vínculo errado. Fallback (JANIELLY, tabela sem nome legível):
+            # a opção escolhida SUMIU do select (o PJE-Calc remove a verba
+            # incluída) e existe ≥1 linha com excluirItem.
             confirmado = self._page.evaluate(
-                """(cands) => {
+                """([cands, escolhida]) => {
                     const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
                     const cs = cands.map(norm).filter(Boolean);
-                    // linha da tabela do mini-crud tem o link excluirItem
                     const links = [...document.querySelectorAll("[id*='excluirItem']")];
                     for (const a of links) {
                         const tr = a.closest('tr');
-                        if (tr && cs.some(c => norm(tr.textContent).includes(c))) return true;
+                        if (!tr) continue;
+                        const tds = [...tr.querySelectorAll('td')].map(td => norm(td.textContent));
+                        if (tds.some(t => cs.includes(t))) return true;
                     }
-                    // fallback: qualquer painel com o nome + botão excluir presente
-                    return links.length > 0;
+                    const sel = document.querySelector("select[id$=':baseVerbaDeCalculo']");
+                    const aindaNoSelect = sel && [...sel.options].some(o => norm(o.textContent) === norm(escolhida));
+                    return links.length > 0 && !aindaNoSelect;
                 }""",
-                candidatos,
+                [candidatos, sel_ok],
             )
             if confirmado:
                 self.log(f"    ✓ verba principal '{sel_ok}' VINCULADA ao reflexo (lista do bean)")
@@ -8760,6 +8876,21 @@ class PlaywrightAutomatorV2:
         # #80-AG-11: qtd=1 (não 12) — com ocorrência MENSAL, cada mês recebe
         # base×mult/12 (um avo); o acumulado dos meses da estabilidade é o
         # valor integral. qtd=12 daria 12× o devido (base inteira POR MÊS).
+        # #80-EC (0000725-37): reflexos que NÃO são 13º/Férias/FGTS
+        # (periculosidade, HE pagas, adicional noturno SOBRE diferença) caíam
+        # no `else` genérico (div 1 / mult 1 / qtd 1) — a periculosidade virou
+        # 100% da base (R$ 29.868 em vez de R$ 563). Agora: (1) o override da
+        # prévia (`outro_valor_divisor`/`outro_valor_multiplicador`) manda;
+        # (2) sem override, o multiplicador vem do % do nome (30% → 0,3; HE
+        # 50% → 1,5) e o divisor é 220 para verbas de hora.
+        import re as _re_f
+        _tipo_r = nome_upper.split(" SOBRE ")[0]
+        _m_pct = _re_f.search(r"(\d{1,3})\s*%", _tipo_r)
+        _pct = (float(_m_pct.group(1)) / 100.0) if _m_pct else None
+        _eh_hora = any(k in _tipo_r for k in ("HORAS EXTRAS", "HORA EXTRA", "ADICIONAL NOTURNO",
+                                              "INTERVALO", "SOBREAVISO", "IN ITINERE"))
+        _eh_adicional = ("PERICULOSIDADE" in _tipo_r or "INSALUBRIDADE" in _tipo_r
+                         or _pct is not None or _eh_hora)
         if is_ferias:
             divisor, multiplicador, quantidade, integralizar = "12", "1,33", "1", True
         elif is_13:
@@ -8768,8 +8899,36 @@ class PlaywrightAutomatorV2:
             divisor, multiplicador, quantidade, integralizar = "100", "11,2", "1", False
         elif is_fgts:
             divisor, multiplicador, quantidade, integralizar = "100", "8", "1", False
+        elif _eh_adicional:
+            if _eh_hora and _pct is not None and "NOTURNO" not in _tipo_r:
+                _mult = 1.0 + _pct
+            elif _pct is not None:
+                _mult = _pct
+            elif "PERICULOSIDADE" in _tipo_r:
+                _mult = 0.3
+            else:
+                _mult = 1.5 if _eh_hora else 1.0
+            divisor = "220" if _eh_hora else "1"
+            multiplicador = f"{_mult:.4f}".rstrip("0").rstrip(".").replace(".", ",")
+            quantidade, integralizar = "1", False
         else:
             divisor, multiplicador, quantidade, integralizar = "1", "1", "1", True
+        # Override explícito da prévia (fidelidade prévia↔automação) prevalece
+        try:
+            _ov_div = getattr(ov, "outro_valor_divisor", None) if ov else None
+            _ov_mult = getattr(ov, "outro_valor_multiplicador", None) if ov else None
+            if _ov_div is not None and float(_ov_div) > 0:
+                divisor = f"{float(_ov_div):.4f}".rstrip("0").rstrip(".").replace(".", ",")
+            if _ov_mult is not None and float(_ov_mult) > 0:
+                multiplicador = f"{float(_ov_mult):.4f}".rstrip("0").rstrip(".").replace(".", ",")
+        except (TypeError, ValueError):
+            pass
+        if _eh_hora and not (is_ferias or is_13 or is_fgts):
+            self.log(
+                f"    🛑 #80-EC reflexo de HORAS '{_tipo_r[:40]}' lançado com quantidade=1 "
+                "— a quantidade MENSAL de horas pagas (holerites) NÃO é derivável; "
+                "ajustar nas ocorrências do reflexo no PJE-Calc"
+            )
 
         # #80-AG: característica DEFAULT por tipo quando o override não define
         # (CLAUDE.md, tabela "Reflexos pós-contratuais": Férias+1/3→FERIAS,
@@ -9103,7 +9262,7 @@ class PlaywrightAutomatorV2:
                             if (!tds.some(td => tight(td.textContent) === cT)) continue;
                             exibir.click();
                             try { exibir.dispatchEvent(new MouseEvent('click', {bubbles:true})); } catch(e) {}
-                            return 'exibir-clicked:'+c;
+                            window.__pjcPrincipalPrefix = ([...tr.querySelectorAll('[id*=":listagem:"]')].map(e => (e.id.match(/^(.*:listagem:\\d+:)/)||[])[1]).find(Boolean)) || null; return 'exibir-clicked:'+c;
                         }
                     }
                     for (const c of candidatos) {
@@ -9114,7 +9273,7 @@ class PlaywrightAutomatorV2:
                             if (exibir) {
                                 exibir.click();
                                 try { exibir.dispatchEvent(new MouseEvent('click', {bubbles:true})); } catch(e) {}
-                                return 'exibir-clicked:'+c;
+                                window.__pjcPrincipalPrefix = ([...tr.querySelectorAll('[id*=":listagem:"]')].map(e => (e.id.match(/^(.*:listagem:\\d+:)/)||[])[1]).find(Boolean)) || null; return 'exibir-clicked:'+c;
                             }
                         }
                     }
@@ -9200,7 +9359,17 @@ class PlaywrightAutomatorV2:
                     const strip = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
                     const norm = s => strip((s||'')).toUpperCase().replace(/\\s+/g,' ').trim();
                     const cands = (alvoCands||[]).map(norm).filter(Boolean);
-                    const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
+                    let cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
+                    // #80-EC (0000725-37): o scan era GLOBAL — o painel da 2ª
+                    // DIFERENÇA SALARIAL "confirmou" a periculosidade casando o
+                    // reflexo MANUAL da 1ª verba (linha de outra principal) e o
+                    // reflexo da 2ª nunca foi criado. Restringir à linha dona
+                    // (prefixo formulario:listagem:N: capturado no click Exibir).
+                    const pfx = window.__pjcPrincipalPrefix || null;
+                    if (pfx) {
+                        const mine = cbs.filter(cb => cb.id.startsWith(pfx));
+                        if (mine.length) cbs = mine;
+                    }
                     const rows = cbs.map(cb => ({cb, txt: norm(cb.closest('tr') ? cb.closest('tr').textContent : '')})).filter(r => r.txt);
                     const labels = rows.map(r => r.txt);
                     if (!cands.length) return {cbId: null, labels};
@@ -9378,10 +9547,11 @@ class PlaywrightAutomatorV2:
                     return
             self.log(f"    🛑 Reflexo '{reflexo.nome}' NÃO persistiu após 3 tentativas (alvo='{alvo}')")
 
-        # Se há overrides, abrir Parâmetros do reflexo e ajustar
-        if reflexo.parametros_override:
-            self.log(f"    → Aplicando overrides em {reflexo.nome}")
-            # Implementação detalhada via doc 07 — pular nesta versão MVP
+        # Overrides de reflexo checkbox (comportamento/incidências) são
+        # aplicados na sub-fase #80-ED, após o loop de verbas (o botão
+        # Parâmetros do reflexo só existe depois do save da principal).
+        if self._reflexo_override_aplicavel(reflexo):
+            self.log(f"    ℹ #80-ED override de '{reflexo.nome}' será aplicado após o loop")
 
     def _setar_checkbox_reflexo_confirmado(
         self, cb_id: str, desejado: bool = True, contexto: str = "", max_tent: int = 3
@@ -9796,6 +9966,184 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"    ⚠ #80-BK verificação de reflexos: {str(e)[:150]}")
                 return
+
+    def _reflexo_override_aplicavel(self, reflexo) -> bool:
+        """#80-ED: há override que só se aplica abrindo os Parâmetros do reflexo?"""
+        ov = getattr(reflexo, "parametros_override", None)
+        if not ov:
+            return False
+        estrat = getattr(reflexo, "estrategia_reflexa", None)
+        estrat = getattr(estrat, "value", estrat)
+        if str(estrat or "checkbox_painel").lower() != "checkbox_painel":
+            return False  # o fluxo Manual já aplica o override no form
+        return any(
+            getattr(ov, campo, None) is not None
+            for campo in ("comportamento_reflexo", "periodo_media_reflexo",
+                          "tratamento_fracao_mes", "incidencias")
+        )
+
+    def _aplicar_override_reflexo_checkbox(self, verba_principal, reflexo) -> bool:
+        """#80-ED (0000725-37, 03/10/2026): aplica `parametros_override` de um
+        reflexo CHECKBOX abrindo os seus Parâmetros (botão da linha
+        `listaReflexo`, disponível após o save da principal).
+
+        O Expresso cria o reflexo com Comportamento = VALOR MENSAL: a
+        ocorrência do 13º/férias lê o valor da principal NO MÊS da ocorrência
+        (dezembro / mês do gozo). Para principal de valor VARIÁVEL ou de
+        período PARCIAL no ano (HE, adicional noturno, diferença salarial
+        limitada a alguns meses) o certo é MÉDIA PELO VALOR — o calculista do
+        0000725-37 trocou os 4 reflexos à mão (13º 2022: R$ 32,52 com média;
+        R$ 0 com valor mensal, pois dezembro/2022 não tinha diferença).
+
+        Campos (doc 07 + XStream do PJC): radios `comportamentoDoReflexo`
+        (VALOR_MENSAL | MEDIA_PELO_VALOR | MEDIA_PELO_VALOR_CORRIGIDO |
+        MEDIA_PELA_QUANTIDADE), `periodoMediaReflexo` (PERIODO_AQUISITIVO |
+        ANO_CIVIL), `tratamentoDaFracaoDeMesDoReflexo` (INTEGRALIZAR |
+        MANTER) e checkboxes irpf/inss/fgts. Radios via
+        `_marcar_radio_verificado` (releitura pós-AJAX — #80-AG-10); save
+        verificado; recusa → Cancelar (#80-DY); Regerar Manter ao final.
+        Nunca silencioso: falha vira 🛑 no log.
+        """
+        ov = reflexo.parametros_override
+        alvo = (reflexo.expresso_reflex_alvo or reflexo.nome or "").upper().strip()
+        self.log(f"  → #80-ED Parâmetros do reflexo '{alvo[:50]}': aplicando override")
+        self._aguardar_servidor_ocioso(contexto="#80-ED pré-form reflexo")
+        link_id = None
+        for tent in range(1, 4):
+            # expandir o "Exibir" da linha DONA do reflexo (mesma técnica do
+            # #80-DX em _ajustar_periodo_reflexo: a linha é a do próprio link)
+            self._page.evaluate(
+                """(alvo) => {
+                    const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                    const links = [...document.querySelectorAll('a[id*=":listaReflexo:"]')]
+                        .filter(a => (a.className||'').includes('linkParametrizar')
+                                  || (a.title||'').toUpperCase().includes('PARAMETRIZAR'));
+                    const lk = links.find(a => { const tr = a.closest('tr');
+                        return tr && norm(tr.textContent).includes(norm(alvo)); });
+                    if (!lk || lk.offsetParent !== null) return 'ja-visivel-ou-ausente';
+                    const m = lk.id.match(/^(.*:listagem:\\d+:)listaReflexo:/);
+                    if (!m) return 'sem-prefixo';
+                    const cel = [...document.querySelectorAll('[id^="' + m[1] + '"]')]
+                        .find(e => !e.id.includes(':listaReflexo:'));
+                    const tr = cel ? cel.closest('tr') : null;
+                    const ex = tr ? tr.querySelector('span.linkDestinacoes') : null;
+                    if (ex) { ex.click(); return 'exibir:' + m[1]; }
+                    return 'sem-exibir';
+                }""",
+                alvo,
+            )
+            self._aguardar_ajax(3000)
+            self._page.wait_for_timeout(800)
+            link_id = self._page.evaluate(
+                """(alvo) => {
+                    const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                    const links = [...document.querySelectorAll('a[id*=":listaReflexo:"]')]
+                        .filter(a => (a.title||'').toUpperCase().includes('PARAMETRIZAR')
+                                  || (a.className||'').includes('linkParametrizar'));
+                    for (const a of links) {
+                        const tr = a.closest('tr');
+                        if (tr && norm(tr.textContent).includes(norm(alvo))) return a.id;
+                    }
+                    return null;
+                }""",
+                alvo,
+            )
+            if link_id:
+                break
+            self.log(f"    ⚠ #80-ED Parâmetros do reflexo '{alvo[:40]}' não visível (tent {tent}/3) — re-navegando")
+            try:
+                if not self._navegar_menu_via_click("li_calculo_verbas"):
+                    self._navegar_menu("li_calculo_verbas")
+                self._page.wait_for_function(
+                    "() => document.querySelectorAll('a.linkParametrizar').length > 0",
+                    timeout=15000,
+                )
+                self._page.wait_for_timeout(1500)
+            except Exception:
+                pass
+        if not link_id:
+            self.log(f"    🛑 #80-ED botão Parâmetros do reflexo '{alvo[:40]}' não encontrado — override NÃO aplicado")
+            return False
+        esc = link_id.replace(":", "\\:")
+        form_ok = False
+        for _ft in range(1, 4):
+            try:
+                self._page.locator(f"a#{esc}").click(force=True, timeout=5000)
+            except Exception as e:
+                self.log(f"    ⚠ click Parâmetros reflexo (tent {_ft}/3): {str(e).splitlines()[0][:80]} — JS click")
+                try:
+                    self._page.evaluate(
+                        "(id) => { const a = document.getElementById(id); if (a) a.click(); return !!a; }",
+                        link_id,
+                    )
+                except Exception:
+                    pass
+            self._aguardar_ajax(8000)
+            try:
+                self._page.wait_for_selector(
+                    "input[type='radio'][id*='comportamentoDoReflexo'], [id$='periodoInicialInputDate']",
+                    timeout=12000,
+                )
+                form_ok = True
+                break
+            except Exception:
+                self.log(f"    ⚠ #80-ED form do reflexo não carregou (tent {_ft}/3)")
+                self._page.wait_for_timeout(2000)
+        if not form_ok:
+            self.log("    🛑 #80-ED form do reflexo não carregou após 3 tentativas — override NÃO aplicado")
+            return False
+        self._page.wait_for_timeout(800)
+        aplicados, falhas = [], []
+        comp = getattr(ov, "comportamento_reflexo", None)
+        comp = getattr(comp, "value", comp)
+        if comp:
+            (aplicados if self._marcar_radio_verificado("comportamentoDoReflexo", str(comp)) else falhas).append(f"comportamento={comp}")
+        pm = getattr(ov, "periodo_media_reflexo", None)
+        pm = getattr(pm, "value", pm)
+        if pm and self._page.locator("input[type='radio'][id*='periodoMediaReflexo']").count() > 0:
+            (aplicados if self._marcar_radio_verificado("periodoMediaReflexo", str(pm)) else falhas).append(f"periodoMedia={pm}")
+        tf = getattr(ov, "tratamento_fracao_mes", None)
+        tf = getattr(tf, "value", tf)
+        if tf:
+            tf = "MANTER" if str(tf) == "NAO_INTEGRALIZAR" else str(tf)
+            if self._page.locator("input[type='radio'][id*='FracaoDeMes']").count() > 0:
+                (aplicados if self._marcar_radio_verificado("FracaoDeMes", tf) else falhas).append(f"fracaoMes={tf}")
+        inc = getattr(ov, "incidencias", None)
+        if inc:
+            try:
+                self._marcar_checkbox("irpf", bool(inc.irpf))
+                self._marcar_checkbox("inss", bool(inc.cs_inss))
+                self._marcar_checkbox("fgts", bool(inc.fgts))
+                aplicados.append(f"incid=irpf:{inc.irpf}/inss:{inc.cs_inss}/fgts:{inc.fgts}")
+            except Exception as _e:
+                falhas.append(f"incidencias:{str(_e)[:60]}")
+        if not aplicados and not falhas:
+            self.log("    ℹ #80-ED nada a aplicar no form do reflexo")
+        self._clicar("salvar")
+        self._aguardar_ajax(10000)
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+        if sucesso:
+            self.log(f"    ✓ #80-ED override do reflexo '{alvo[:40]}' salvo: {', '.join(aplicados) or '-'}"
+                     + (f" (falhas: {', '.join(falhas)})" if falhas else ""))
+        else:
+            erro = self._verificar_erro_jsf()
+            self.log(f"    🛑 #80-ED save do reflexo '{alvo[:40]}' sem confirmação{(' — ' + erro[:120]) if erro else ''}")
+            try:
+                self._clicar("cancelar", timeout_ms=5000)
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1000)
+            except Exception:
+                pass
+        try:
+            if "verba-calculo.jsf" not in self._page.url:
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(800)
+            if self._regerar_com_modal_confirmacao(sobrescrever=False, log_prefix="    "):
+                self.log("    ✓ Regerar pós-override do reflexo")
+        except Exception as _e:
+            self.log(f"    ⚠ Regerar pós-override reflexo: {_e}")
+        return bool(sucesso) and not falhas
 
     def _ajustar_periodo_reflexo(self, verba_principal, reflexo) -> bool:
         """Abre os Parâmetros do REFLEXO e ajusta o período = período da principal.

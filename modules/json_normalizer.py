@@ -2346,6 +2346,359 @@ def _norm_reflexos_expresso_saneados(data: dict[str, Any]) -> None:
             v["reflexos"] = novos
 
 
+def _norm_gerar_diferenca_com_valor_pago(data: dict[str, Any]) -> None:
+    """#80-EA — verba com VALOR PAGO ⇒ `gerar_principal`/`gerar_reflexa` = DIFERENCA.
+
+    **0000725-37 (REGINALDO, 02/10/2026):** a IA emitiu as duas DIFERENÇAS
+    SALARIAIS (piso CCT × salário pago, `valor_pago.tipo=CALCULADO` sobre o
+    histórico SALARIO BASE) com `gerar_reflexa="DEVIDO"` e
+    `gerar_principal="DEVIDO"`. No PJE-Calc "Gerar Reflexa: Devido" faz os
+    reflexos incidirem sobre o DEVIDO BRUTO (o piso inteiro, R$ 2.808,98/mês)
+    em vez da DIFERENÇA (R$ 195,09): 13º/férias/periculosidade/HE saíram
+    ~14× maiores e o cálculo liquidou ~R$ 280 mil contra R$ 31 mil do
+    definitivo. O calculista trocou os dois radios para DIFERENÇA à mão.
+
+    Regra: sempre que a verba carrega um valor pago a abater — `valor_pago`
+    CALCULADO (histórico) ou INFORMADO com `valor_brl > 0` — os dois radios
+    são DIFERENCA. Sem valor pago, DEVIDO ≡ DIFERENÇA e nada é tocado.
+    Exceção: verbas de DEDUÇÃO ("VALOR PAGO - …", "DEVOLUÇÃO …"), em que o
+    valor vive em `valor_pago` por desenho (#80-AD) — o default do Expresso
+    é preservado.
+    """
+    if not isinstance(data, dict):
+        return
+    import logging
+    _log = logging.getLogger(__name__)
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        alvo = f"{v.get('expresso_alvo') or ''} {v.get('nome_pjecalc') or ''}".upper()
+        if "VALOR PAGO" in alvo or "DEVOLU" in alvo or "DEDU" in alvo:
+            continue
+        vp = p.get("valor_pago")
+        if not isinstance(vp, dict):
+            continue
+        tipo = str(vp.get("tipo") or "").upper()
+        try:
+            valor = float(vp.get("valor_brl") or 0)
+        except (TypeError, ValueError):
+            valor = 0.0
+        tem_pago = tipo == "CALCULADO" or (tipo == "INFORMADO" and valor > 0)
+        if not tem_pago:
+            continue
+        mudou = []
+        for campo in ("gerar_reflexa", "gerar_principal"):
+            if str(p.get(campo) or "DIFERENCA").upper() != "DIFERENCA":
+                mudou.append(f"{campo}={p.get(campo)}")
+                p[campo] = "DIFERENCA"
+        if mudou:
+            _log.warning(
+                "Normalizer #80-EA: verba '%s' tem valor pago (%s) mas %s → "
+                "coagido para DIFERENCA (com DEVIDO os reflexos incidem sobre o "
+                "devido bruto, não sobre a diferença — 0000725-37)",
+                v.get("nome_pjecalc"), tipo, ", ".join(mudou),
+            )
+
+
+_FER_NAO_GOZADAS_RE = None
+
+
+def _sentenca_fala_de_ferias_nao_gozadas(texto: str | None) -> bool:
+    """Sinal textual de férias NÃO fruídas (vencidas/dobra/indenizadas)."""
+    global _FER_NAO_GOZADAS_RE
+    if not texto:
+        return False
+    import re as _re
+    import unicodedata as _ud
+    if _FER_NAO_GOZADAS_RE is None:
+        _FER_NAO_GOZADAS_RE = _re.compile(
+            r"ferias\s+(vencidas|nao\s+gozad|nao\s+usufru|nao\s+conced|nao\s+fru|em\s+dobro)"
+            r"|(nao\s+gozad|nao\s+usufru|nao\s+conced|nao\s+fru)\w*\s+(as\s+)?ferias"
+            r"|dobra\s+d[ae]s?\s+ferias|ferias\s+indenizadas"
+        )
+    t = _ud.normalize("NFD", str(texto)).encode("ascii", "ignore").decode().lower()
+    return bool(_FER_NAO_GOZADAS_RE.search(t))
+
+
+def _norm_ferias_situacao_coerente_com_contrato(
+    data: dict[str, Any], sentenca_texto: str | None = None
+) -> None:
+    """#80-EB — PA cujo concessivo terminou ANTES da dispensa é GOZADAS.
+
+    **0000725-37 (REGINALDO, 02/10/2026) — reflexo de férias ZERADO.** A
+    sentença deferiu reflexos da diferença salarial em "férias + 1/3 dos PAs
+    2020/2021, 2021/2022 e 2022/2023". A IA marcou os três como
+    `situacao=INDENIZADAS` (usou a situação como sinônimo de "deferido" —
+    #80-DC). O PJE-Calc apura férias INDENIZADAS na data da RESCISÃO, com a
+    remuneração daquele momento (CLT art. 146): a diferença salarial já não
+    existia em 04/2026 → base 0 → reflexo R$ 0,00 nos três PAs. Quando o
+    calculista trocou 2020/21 e 2021/22 para GOZADAS (a sugestão do próprio
+    PJE-Calc), os reflexos apareceram (R$ 65,03 + R$ 151,73 — média do PA);
+    o PA 2022/23 ficou INDENIZADAS e seguiu zerado, "mesmo após várias
+    tentativas de ajuste".
+
+    Regra (manual §7): concessivo terminado em/antes do desligamento ⇒
+    GOZADAS. Coage `INDENIZADAS` → `GOZADAS` nesses PAs (preservando
+    `deferido`) SALVO quando há evidência de férias NÃO fruídas: a sentença
+    fala em férias vencidas/não gozadas/em dobro/indenizadas, há verba
+    principal de FÉRIAS cobrindo o PA, ou o PA tem `dobra`/gozo declarado.
+    Também normaliza o FIM de PA completo para exatamente 1 ano (a IA
+    gravou 26/08/2024→02/04/2026 num PA que vai até 25/08/2025 — só o último
+    PA, proporcional, termina na dispensa).
+    """
+    fer = data.get("ferias")
+    if not isinstance(fer, dict) or not isinstance(fer.get("periodos"), list):
+        return
+    pc = data.get("parametros_calculo") if isinstance(data.get("parametros_calculo"), dict) else {}
+    dem_d = _fer_parse(pc.get("data_demissao"))
+    if not dem_d:
+        return
+    import logging
+    from datetime import timedelta as _td
+    _log = logging.getLogger(__name__)
+
+    # verbas principais de FÉRIAS (vencidas/dobra) — cobrem PAs não fruídos
+    periodos_ferias_verba = []
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        nome = f"{v.get('expresso_alvo') or ''} {v.get('nome_pjecalc') or ''} {v.get('nome_sentenca') or ''}".upper()
+        if "FÉRIAS" not in nome and "FERIAS" not in nome:
+            continue
+        p = v.get("parametros") if isinstance(v.get("parametros"), dict) else {}
+        pi, pf = _fer_parse(p.get("periodo_inicio")), _fer_parse(p.get("periodo_fim"))
+        if pi and pf:
+            periodos_ferias_verba.append((pi, pf))
+    sentenca_nao_gozadas = _sentenca_fala_de_ferias_nao_gozadas(sentenca_texto)
+
+    for pa in fer["periodos"]:
+        if not isinstance(pa, dict):
+            continue
+        ini = _fer_parse(pa.get("periodo_aquisitivo_inicio"))
+        if not ini:
+            continue
+        fim_1ano = _fer_mais_anos(ini, 1) - _td(days=1)
+        proporcional = fim_1ano > dem_d
+        # (a) PA completo tem exatamente 1 ano
+        fim = _fer_parse(pa.get("periodo_aquisitivo_fim"))
+        if not proporcional and fim and fim != fim_1ano:
+            _log.warning(
+                "Normalizer #80-EB: PA %s terminava em %s — PA completo tem 1 ano; "
+                "fim corrigido para %s", pa.get("periodo_aquisitivo_inicio"),
+                pa.get("periodo_aquisitivo_fim"), fim_1ano.strftime("%d/%m/%Y"),
+            )
+            pa["periodo_aquisitivo_fim"] = fim_1ano.strftime("%d/%m/%Y")
+            pa["periodo_concessivo_inicio"] = (fim_1ano + _td(days=1)).strftime("%d/%m/%Y")
+            pa["periodo_concessivo_fim"] = _fer_mais_anos(fim_1ano, 1).strftime("%d/%m/%Y")
+        if proporcional:
+            continue
+        # (b) INDENIZADAS num PA cujo concessivo terminou antes da dispensa
+        if str(pa.get("situacao") or "").upper() != "INDENIZADAS":
+            continue
+        conc_fim = _fer_parse(pa.get("periodo_concessivo_fim")) or _fer_mais_anos(fim_1ano, 1)
+        if conc_fim > dem_d:
+            continue  # o PJE-Calc sugere INDENIZADAS — nada a fazer
+        gozo = pa.get("gozo_1") if isinstance(pa.get("gozo_1"), dict) else None
+        if gozo and (gozo.get("data_inicio") or gozo.get("data_fim")):
+            continue  # fruição declarada (gozo parcial/dobra) — não mexer
+        if pa.get("dobra"):
+            continue
+        if sentenca_nao_gozadas:
+            continue
+        if any(pi <= fim_1ano and pf >= ini for pi, pf in periodos_ferias_verba):
+            continue  # férias condenadas como verba própria cobrem este PA
+        if pa.get("deferido") is None:
+            pa["deferido"] = _fer_deferido(pa)  # resolver ANTES de mudar o FATO
+        pa["situacao"] = "GOZADAS"
+        _log.warning(
+            "Normalizer #80-EB: PA %s→%s INDENIZADAS com concessivo encerrado em %s "
+            "(antes da dispensa %s) → GOZADAS (sugestão do PJE-Calc; `deferido=%s` "
+            "preservado). INDENIZADAS aqui zera o reflexo de férias — 0000725-37",
+            pa.get("periodo_aquisitivo_inicio"), pa.get("periodo_aquisitivo_fim"),
+            conc_fim.strftime("%d/%m/%Y"), dem_d.strftime("%d/%m/%Y"), pa.get("deferido"),
+        )
+
+
+# Tipos de reflexo que o PJE-Calc pré-cadastra como CHECKBOX no painel
+# "Exibir" das verbas Expresso (observado em DIFERENÇA SALARIAL, HE, adicionais,
+# rescisórias). Qualquer outro tipo NÃO tem checkbox e precisa ser verba
+# Manual Tipo=REFLEXO (#80-EC).
+_REFLEXOS_COM_CHECKBOX_EXPRESSO = (
+    "13", "DÉCIMO TERCEIRO", "DECIMO TERCEIRO", "FÉRIAS", "FERIAS",
+    "AVISO PRÉVIO", "AVISO PREVIO", "MULTA DO ARTIGO 477", "MULTA DO ART. 477",
+    "MULTA 477", "MULTA DO ARTIGO 467", "MULTA DO ART. 467", "MULTA 467",
+    "REPOUSO SEMANAL", "RSR", "DSR", "DESCANSO SEMANAL",
+)
+
+
+def _reflexo_tipo(nome: str) -> str:
+    """Prefixo do reflexo antes de ' SOBRE ' (o TIPO: 13º, Férias, HE…)."""
+    n = (nome or "").upper().strip()
+    return n.split(" SOBRE ")[0].strip() if " SOBRE " in n else n
+
+
+def _norm_reflexos_sem_checkbox_viram_manual(data: dict[str, Any]) -> None:
+    """#80-EC — reflexo cujo TIPO não é candidato Expresso ⇒ `manual` COM fórmula.
+
+    **0000725-37 (REGINALDO, 02/10/2026):** a sentença deferiu reflexos da
+    diferença salarial em ADICIONAL DE PERICULOSIDADE 30% e em HORAS EXTRAS
+    pagas. A IA emitiu ambos como `checkbox_painel`
+    (`expresso_reflex_alvo="ADICIONAL DE PERICULOSIDADE 30% SOBRE DIFERENCA
+    SALARIAL"`). O painel "Exibir" da DIFERENÇA SALARIAL só oferece 13º /
+    AVISO PRÉVIO / FÉRIAS + 1/3 / MULTA 477; o bot tentou o checkbox 5×,
+    caiu no fallback Manual e criou o reflexo com a fórmula GENÉRICA
+    (divisor 1, multiplicador 1, quantidade 1) — a periculosidade saiu como
+    100% da base (R$ 29.868 em vez de R$ 563) e as HE sem divisor 220.
+
+    Regra: tipo fora de `_REFLEXOS_COM_CHECKBOX_EXPRESSO` → `estrategia_reflexa=
+    "manual"` + `parametros_override` com a fórmula derivada do nome
+    (percentual → multiplicador; HE/noturno → divisor 220), característica
+    COMUM, ocorrência MENSAL, período e incidências da principal. A prévia
+    passa a mostrar exatamente o que o bot vai lançar (fidelidade).
+    """
+    if not isinstance(data, dict):
+        return
+    import logging
+    import re as _re
+    _log = logging.getLogger(__name__)
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros") if isinstance(v.get("parametros"), dict) else {}
+        for r in v.get("reflexos") or []:
+            if not isinstance(r, dict):
+                continue
+            if (r.get("estrategia_reflexa") or "checkbox_painel").lower() != "checkbox_painel":
+                continue
+            tipo = _reflexo_tipo(r.get("expresso_reflex_alvo") or r.get("nome") or "")
+            if not tipo or any(k in tipo for k in _REFLEXOS_COM_CHECKBOX_EXPRESSO):
+                continue
+            ov = r.get("parametros_override")
+            if not isinstance(ov, dict):
+                ov = {}
+                r["parametros_override"] = ov
+            r["estrategia_reflexa"] = "manual"
+            m_pct = _re.search(r"(\d{1,3})\s*%", tipo)
+            pct = float(m_pct.group(1)) / 100.0 if m_pct else None
+            eh_hora = any(k in tipo for k in ("HORAS EXTRAS", "HORA EXTRA", "ADICIONAL NOTURNO",
+                                                "INTERVALO", "SOBREAVISO", "IN ITINERE"))
+            if ov.get("outro_valor_multiplicador") is None:
+                if eh_hora and pct is not None and "NOTURNO" not in tipo:
+                    ov["outro_valor_multiplicador"] = round(1.0 + pct, 4)   # HE 50% → 1,5
+                elif pct is not None:
+                    ov["outro_valor_multiplicador"] = round(pct, 4)         # periculosidade 30% → 0,3
+                elif "PERICULOSIDADE" in tipo:
+                    ov["outro_valor_multiplicador"] = 0.3
+                elif eh_hora:
+                    ov["outro_valor_multiplicador"] = 1.5
+            if ov.get("outro_valor_divisor") is None:
+                ov["outro_valor_divisor"] = 220.0 if eh_hora else 1.0
+            if not ov.get("caracteristica"):          # a IA emite as chaves com null
+                ov["caracteristica"] = "COMUM"
+            if not ov.get("ocorrencia_pagamento"):
+                ov["ocorrencia_pagamento"] = "MENSAL"
+            if not ov.get("periodo_inicio") and p.get("periodo_inicio"):
+                ov["periodo_inicio"] = p["periodo_inicio"]
+            if not ov.get("periodo_fim") and p.get("periodo_fim"):
+                ov["periodo_fim"] = p["periodo_fim"]
+            if not ov.get("incidencias") and isinstance(p.get("incidencias"), dict):
+                ov["incidencias"] = dict(p["incidencias"])
+            aviso = ""
+            if eh_hora:
+                aviso = (" ⚠ a QUANTIDADE mensal (horas pagas nos holerites) não é "
+                         "derivável — conferir/ajustar nas ocorrências do reflexo.")
+                ov["comentarios"] = (ov.get("comentarios") or "") + aviso
+            _log.warning(
+                "Normalizer #80-EC: reflexo '%s' de '%s' não tem checkbox no painel "
+                "Expresso (tipo '%s') → estrategia=manual, divisor=%s, "
+                "multiplicador=%s, %s/%s, período %s→%s.%s",
+                r.get("nome"), v.get("nome_pjecalc"), tipo,
+                ov.get("outro_valor_divisor"), ov.get("outro_valor_multiplicador"),
+                ov.get("caracteristica"), ov.get("ocorrencia_pagamento"),
+                ov.get("periodo_inicio"), ov.get("periodo_fim"), aviso,
+            )
+
+
+def _norm_informado_ocorrencia_unica_periodo_mes(data: dict[str, Any]) -> None:
+    """#80-EE — verba INFORMADA de ocorrência ÚNICA ⇒ período = o próprio mês.
+
+    **0000725-37 (REGINALDO, 02/10/2026):** as 4 MULTAS NORMATIVAS (uma por
+    instrumento coletivo) vieram com período = vigência do instrumento
+    (13/05/2021→28/02/2022…) e `ocorrencias_override.valores_mensais` com UM
+    mês. O PJE-Calc gerou uma ocorrência por mês do período com o valor
+    informado (10 × R$ 1.419,53 = R$ 14.195) e a Fase 5, que zeraria os
+    demais meses na grade, abortou nas 5 verbas (LockTimeout pós-Regerar,
+    "NENHUMA das 4 strategies navegou para Ocorrências"). R$ 55 mil a maior
+    só nas multas.
+
+    Com o período restrito ao mês da ocorrência, o PJE-Calc gera EXATAMENTE
+    uma ocorrência com o valor informado — sem depender da grade. Vale para
+    INFORMADO + MENSAL + `valores_mensais` com um único mês (ou vários meses
+    iguais). Juros/correção não mudam: correm da data da ocorrência.
+    """
+    if not isinstance(data, dict):
+        return
+    import logging
+    import re as _re
+    _log = logging.getLogger(__name__)
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros") if isinstance(v.get("parametros"), dict) else {}
+        if str(p.get("valor") or "").upper() != "INFORMADO":
+            continue
+        if str(p.get("ocorrencia_pagamento") or "MENSAL").upper() != "MENSAL":
+            continue
+        ov = v.get("ocorrencias_override")
+        if not isinstance(ov, dict) or ov.get("modo") != "valores_mensais":
+            continue
+        meses = []
+        for o in ov.get("valores_mensais") or []:
+            if not isinstance(o, dict):
+                continue
+            m = _re.match(r"^\s*(\d{2})/(\d{4})\s*$", str(o.get("mes") or ""))
+            if not m:
+                meses = []
+                break
+            try:
+                if float(o.get("valor_devido") or 0) <= 0 and float(o.get("valor_pago") or 0) <= 0:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            meses.append((int(m.group(2)), int(m.group(1)), o))
+        if len({(a, b) for a, b, _ in meses}) != 1:
+            continue
+        ano, mes, occ = meses[0]
+        ini = f"01/{mes:02d}/{ano}"
+        fim = f"{calendar.monthrange(ano, mes)[1]:02d}/{mes:02d}/{ano}"
+        pi, pf = p.get("periodo_inicio"), p.get("periodo_fim")
+        # clamp ao período da verba quando ele cai dentro do mês (ex.: 13/05)
+        d_pi, d_pf = _fer_parse(pi), _fer_parse(pf)
+        d_ini, d_fim = _fer_parse(ini), _fer_parse(fim)
+        if d_pi and d_ini and d_pi > d_ini and d_pi <= d_fim:
+            ini = pi
+        if d_pf and d_fim and d_pf < d_fim and d_pf >= d_ini:
+            fim = pf
+        if (pi, pf) == (ini, fim):
+            continue
+        p["periodo_inicio"], p["periodo_fim"] = ini, fim
+        try:
+            vd = float(occ.get("valor_devido") or 0)
+            if vd > 0 and isinstance(p.get("valor_devido"), dict):
+                p["valor_devido"]["valor_informado_brl"] = vd
+        except (TypeError, ValueError):
+            pass
+        _log.warning(
+            "Normalizer #80-EE: verba INFORMADA '%s' tem ocorrência ÚNICA em %02d/%d — "
+            "período %s→%s restrito a %s→%s (o PJE-Calc gera 1 ocorrência; antes "
+            "gerava uma por mês do período — 0000725-37)",
+            v.get("nome_pjecalc"), mes, ano, pi, pf, ini, fim,
+        )
+
+
 def _norm_expresso_alvo_canonico(data: dict[str, Any]) -> None:
     """#80-AR — `expresso_alvo` DEVE ser o nome CANÔNICO EXATO (rol das 54).
 
@@ -2804,6 +3157,11 @@ def normalize_v2_json(
     # a prévia não declarou (deferido=False) para que a omissão seja VISÍVEL.
     # #80-DZ ANTES: gozo declarado no campo de concessivo → gozo_1.
     _norm_ferias_gozo_declarado_como_concessivo(data)
+    # #80-EB (0000725-37): PA com concessivo encerrado ANTES da dispensa é
+    # GOZADAS (manual §7) — INDENIZADAS ali faz o PJE-Calc apurar a ocorrência
+    # na rescisão e o reflexo de diferença já extinta sai R$ 0,00. Também
+    # corrige PA completo p/ 1 ano. ANTES do #80-DC/#80-CY (que leem a aba).
+    _norm_ferias_situacao_coerente_com_contrato(data, sentenca_texto=sentenca_texto)
     _norm_ferias_completar_periodos_do_contrato(data)
 
     # Salvaguarda #80-CY: período da verba de FÉRIAS estreitado até a 1ª data de
@@ -2865,6 +3223,24 @@ def normalize_v2_json(
     # 0000905-05). DEVE rodar APÓS o _pos_contratuais_manual (preserva os
     # reflexos manuais de estabilidade).
     _norm_reflexos_expresso_saneados(data)
+
+    # Salvaguarda #80-EC (0000725-37): reflexo cujo TIPO não é candidato de
+    # checkbox do Expresso (periculosidade/HE/noturno SOBRE diferença…) vira
+    # `manual` COM a fórmula (multiplicador pelo %, divisor 220 p/ horas) —
+    # senão o fallback do bot cria o reflexo com div 1/mult 1 (100% da base).
+    # DEPOIS do #80-AJ (que já saneou alvos e removeu "FGTS SOBRE").
+    _norm_reflexos_sem_checkbox_viram_manual(data)
+
+    # Salvaguarda #80-EA (0000725-37): verba com VALOR PAGO (CALCULADO ou
+    # INFORMADO > 0) ⇒ gerar_reflexa/gerar_principal = DIFERENCA. Com DEVIDO
+    # os reflexos incidem sobre o devido BRUTO (piso inteiro) — R$ 280 mil
+    # contra R$ 31 mil no definitivo.
+    _norm_gerar_diferenca_com_valor_pago(data)
+
+    # Salvaguarda #80-EE (0000725-37): verba INFORMADA com ocorrência ÚNICA
+    # (multa normativa etc.) tem o período restrito ao mês — o PJE-Calc gera
+    # 1 ocorrência, sem depender da Fase 5 (grade de ocorrências).
+    _norm_informado_ocorrencia_unica_periodo_mes(data)
 
     # 4b. Cartão de Ponto — sanitização + migração + defaults
     #
