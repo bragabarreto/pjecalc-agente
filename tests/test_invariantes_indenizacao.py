@@ -5905,7 +5905,7 @@ def test_inv170_bot_vinculo_exato_painel_por_linha_proativo_condicional_override
     assert "Implementação detalhada via doc 07 — pular nesta versão MVP" not in cfg
     assert "_reflexo_override_aplicavel(reflexo)" in cfg
     f5 = pw.split("def _configurar_ocorrencias_informado_inline")[1].split("\n    def ")[0]
-    assert "_precisa_proativo" in f5 and "self._verba_periodo_curto(v)" in f5
+    assert "_precisa_proativo" in f5 and '!= "manual"' in f5, "proativo só é dispensado p/ verba Manual (run 2: PLR Expresso ficou com 6 linhas)"
     assert "formulario:msgAguardeContainer" in f5
     assert '_aguardar_servidor_ocioso(contexto="#80-EE pré-linkOcorrencias")' in f5
     assert "mes_to_pago" in f5 and "':valorPago'" in f5

@@ -3903,9 +3903,10 @@ class PlaywrightAutomatorV2:
         _estrat_v = getattr(v, "estrategia_preenchimento", None)
         _estrat_v = getattr(_estrat_v, "value", _estrat_v)
         _ocorr_v = str(getattr(v.parametros, "ocorrencia_pagamento", "") or "").upper()
-        _precisa_proativo = (str(_estrat_v or "").lower() != "manual") and (
-            "DESLIGAMENTO" in _ocorr_v or self._verba_periodo_curto(v)
-        )
+        # Run 2 do 0000725-37: a PLR (Expresso, MENSAL, período = cálculo)
+        # ficou com a grade de 6 linhas sem o Regerar → só verba MANUAL
+        # dispensa o proativo; Expresso mantém o comportamento original.
+        _precisa_proativo = str(_estrat_v or "").lower() != "manual"
         if _precisa_proativo:
             try:
                 ok_regerar = self._regerar_com_modal_confirmacao(
@@ -3917,7 +3918,7 @@ class PlaywrightAutomatorV2:
             except Exception as _e:
                 self.log(f"    ⚠ Regerar proativo: {_e}")
         else:
-            self.log("    ℹ #80-EE Regerar proativo dispensado (verba Manual/MENSAL com período próprio)")
+            self.log("    ℹ #80-EE Regerar proativo dispensado (verba Manual — ocorrências já nasceram com o período certo)")
 
         # FORENSE (25/05/2026 v2): dump DOM ANTES de clicar linkOcorrencias —
         # capturar estado real da listagem após PROATIVO Regerar.
@@ -10009,20 +10010,53 @@ class PlaywrightAutomatorV2:
         """
         ov = reflexo.parametros_override
         alvo = (reflexo.expresso_reflex_alvo or reflexo.nome or "").upper().strip()
+        # candidatos: alvo da prévia, "<tipo> SOBRE <nome_pjecalc>" e o nome do reflexo
+        alvos = [alvo]
+        if " SOBRE " in alvo:
+            _tipo = alvo[: alvo.index(" SOBRE ")]
+            for _y in (verba_principal.nome_pjecalc, getattr(verba_principal, "expresso_alvo", None)):
+                if _y and f"{_tipo} SOBRE {_y.upper()}" not in alvos:
+                    alvos.append(f"{_tipo} SOBRE {_y.upper()}")
+        if reflexo.nome and reflexo.nome.upper() not in alvos:
+            alvos.append(reflexo.nome.upper())
         self.log(f"  → #80-ED Parâmetros do reflexo '{alvo[:50]}': aplicando override")
         self._aguardar_servidor_ocioso(contexto="#80-ED pré-form reflexo")
+        # Re-ancorar na LISTAGEM de verbas (a Fase 5 deixa o bot na grade de
+        # ocorrências; conversa morta → F+R). Run 2: "menu li_calculo_verbas
+        # não encontrado no sidebar" e 4 overrides perdidos.
+        for _anc in range(1, 3):
+            try:
+                if not self._navegar_menu_via_click("li_calculo_verbas"):
+                    self._navegar_menu("li_calculo_verbas")
+                self._page.wait_for_function(
+                    "() => document.querySelectorAll('a.linkParametrizar').length > 0",
+                    timeout=20000,
+                )
+                break
+            except Exception:
+                self.log(f"    ⚠ #80-ED listagem de verbas não ancorou (tent {_anc}/2) — Fechar+Reabrir")
+                try:
+                    self._fechar_e_reabrir_calculo()
+                except Exception as _e:
+                    self.log(f"    ⚠ #80-ED F+R: {str(_e)[:80]}")
         link_id = None
         for tent in range(1, 4):
             # expandir o "Exibir" da linha DONA do reflexo (mesma técnica do
             # #80-DX em _ajustar_periodo_reflexo: a linha é a do próprio link)
             self._page.evaluate(
-                """(alvo) => {
-                    const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                """(alvos) => {
+                    // #80-ED run 2: o alvo da prévia vem sem acento/ordinal
+                    // ("13 SALARIO SOBRE…") e o rótulo do PJE-Calc tem
+                    // "13º SALÁRIO…" — includes() cru nunca casava. Normalizar
+                    // NFD sem diacríticos, º/ª removidos, espaços colapsados.
+                    const norm = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+                        .replace(/[ºª°]/g,'').toUpperCase().replace(/\\s+/g,' ').trim();
+                    const cands = alvos.map(norm).filter(Boolean);
                     const links = [...document.querySelectorAll('a[id*=":listaReflexo:"]')]
                         .filter(a => (a.className||'').includes('linkParametrizar')
                                   || (a.title||'').toUpperCase().includes('PARAMETRIZAR'));
                     const lk = links.find(a => { const tr = a.closest('tr');
-                        return tr && norm(tr.textContent).includes(norm(alvo)); });
+                        return tr && cands.some(c => norm(tr.textContent).includes(c)); });
                     if (!lk || lk.offsetParent !== null) return 'ja-visivel-ou-ausente';
                     const m = lk.id.match(/^(.*:listagem:\\d+:)listaReflexo:/);
                     if (!m) return 'sem-prefixo';
@@ -10033,23 +10067,25 @@ class PlaywrightAutomatorV2:
                     if (ex) { ex.click(); return 'exibir:' + m[1]; }
                     return 'sem-exibir';
                 }""",
-                alvo,
+                alvos,
             )
             self._aguardar_ajax(3000)
             self._page.wait_for_timeout(800)
             link_id = self._page.evaluate(
-                """(alvo) => {
-                    const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                """(alvos) => {
+                    const norm = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+                        .replace(/[ºª°]/g,'').toUpperCase().replace(/\\s+/g,' ').trim();
+                    const cands = alvos.map(norm).filter(Boolean);
                     const links = [...document.querySelectorAll('a[id*=":listaReflexo:"]')]
                         .filter(a => (a.title||'').toUpperCase().includes('PARAMETRIZAR')
                                   || (a.className||'').includes('linkParametrizar'));
                     for (const a of links) {
                         const tr = a.closest('tr');
-                        if (tr && norm(tr.textContent).includes(norm(alvo))) return a.id;
+                        if (tr && cands.some(c => norm(tr.textContent).includes(c))) return a.id;
                     }
                     return null;
                 }""",
-                alvo,
+                alvos,
             )
             if link_id:
                 break
