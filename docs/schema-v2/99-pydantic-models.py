@@ -513,7 +513,7 @@ class ValorPagoVerba(BaseModel):
 
 class OcorrenciaMensalOverride(BaseModel):
     mes: str  # MM/YYYY
-    valor_devido: float
+    valor_devido: Optional[float] = None  # #80-EF: reflexo CALCULADO só traz `quantidade`
     valor_pago: float = 0.0
     quantidade: Optional[float] = None  # ex: HE 50% qtd horas/mês
     multiplicador: Optional[float] = None
