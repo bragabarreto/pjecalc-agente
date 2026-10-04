@@ -2803,11 +2803,27 @@ class PlaywrightAutomatorV2:
         aplicados = 0
         usadas: set = set()
         for r, vms in pares:
-            r_nome = (r.expresso_reflex_alvo or r.nome or "")
-            tipo = _norm(r_nome.split(" SOBRE ")[0] if " SOBRE " in r_nome.upper() else r_nome)
-            cands = [s for s in secoes if s["n"] not in usadas and tipo and tipo in _norm(s["header"])]
+            r_nome = (r.nome or r.expresso_reflex_alvo or "")
+            # Run 6: o reflexo Manual é nomeado pelo `nome` da prévia ("HORAS
+            # EXTRAS SOBRE…") e o alvo Expresso traz "HORAS EXTRAS 50%" — casar
+            # pelo TIPO de qualquer um dos dois, por substring e por tokens
+            # (sem o percentual), exigindo seção ÚNICA.
+            def _tipo(s):
+                s = (s or "").upper()
+                return _norm(s.split(" SOBRE ")[0] if " SOBRE " in s else s)
+            tipos = [t for t in {_tipo(r.nome), _tipo(r.expresso_reflex_alvo)} if t]
+            def _toks(s):
+                return {t for t in _re_ef.split(r"[^A-Z0-9]+", s) if len(t) > 2 and "%" not in t and not t.isdigit()}
+            def _casa(header):
+                h = _norm(header)
+                if any(t in h for t in tipos):
+                    return True
+                ht = _toks(h.split(" SOBRE ")[0] if " SOBRE " in h else h)
+                return any(_toks(t) and _toks(t) <= ht for t in tipos)
+            cands = [s for s in secoes if s["n"] not in usadas and _casa(s["header"])]
+            tipo = tipos[0] if tipos else ""
             if len(cands) != 1:
-                self.log(f"    🛑 #80-EF reflexo '{r_nome[:45]}': {len(cands)} seção(ões) casam o tipo '{tipo[:30]}' — não aplicado (não se adivinha)")
+                self.log(f"    🛑 #80-EF reflexo '{r_nome[:45]}': {len(cands)} seção(ões) casam o tipo {tipos} — não aplicado (não se adivinha)")
                 continue
             sec = cands[0]
             usadas.add(sec["n"])
