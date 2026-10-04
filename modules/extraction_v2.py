@@ -1449,8 +1449,12 @@ mês; `220` para verbas de hora), `caracteristica: "COMUM"`,
 principal. Caso 0000725-37: emitidos como `checkbox_painel`, caíram no
 fallback do bot com divisor 1 / multiplicador 1 — a periculosidade virou
 100% da base (R$ 29.868 em vez de R$ 563). Para HE pagas, informe a quantidade
-mensal de horas dos holerites em `ocorrencias_override.valores_mensais[].quantidade`
-e avise em `comentarios` (o bot lança quantidade 1 e sinaliza para ajuste).
+mensal de horas dos holerites no PRÓPRIO reflexo:
+`"ocorrencias_override": {"modo": "valores_mensais", "valores_mensais":
+[{"mes": "05/2021", "quantidade": 8.18}, {"mes": "10/2021", "quantidade": 10.40}]}`
+— o bot grava cada mês na seção "Reflexos" da grade de ocorrências da
+principal (#80-EF); meses não listados ficam com quantidade ZERO. Use
+`parametros_override.quantidade_informada` só como média de segurança.
 (O normalizer também coage como salvaguarda.)
 
 ⚠️ **COMPORTAMENTO DO REFLEXO: MÉDIA para principal variável ou parcial (#80-ED)**:

@@ -2649,6 +2649,221 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"  ⚠ Re-aplicar valorDevido '{v.nome_pjecalc}': {e}")
 
+        # #80-EF: quantidade/valor MENSAL dos REFLEXOS (seção "Reflexos" da grade
+        # de ocorrências da principal) — ex.: horas extras pagas por mês.
+        for v in self.previa.verbas_principais:
+            try:
+                if self._reflexos_com_override_mensal(v):
+                    self._aplicar_quantidades_mensais_reflexos(v)
+            except Exception as e:
+                self.log(f"  ⚠ #80-EF ocorrências dos reflexos de '{v.nome_pjecalc}': {e}")
+
+    def _reflexos_com_override_mensal(self, verba_principal) -> list:
+        """#80-EF: reflexos da principal com `ocorrencias_override.valores_mensais`
+        trazendo quantidade/valor por mês (ex.: horas extras pagas nos holerites)."""
+        out = []
+        for r in (getattr(verba_principal, "reflexos", None) or []):
+            ov = getattr(r, "ocorrencias_override", None)
+            if ov is None or getattr(ov, "modo", None) != "valores_mensais":
+                continue
+            vms = getattr(ov, "valores_mensais", None) or []
+            if any(getattr(o, "quantidade", None) is not None
+                   or getattr(o, "valor_devido", None) or getattr(o, "valor_pago", None)
+                   for o in vms):
+                out.append((r, vms))
+        return out
+
+    def _aplicar_quantidades_mensais_reflexos(self, verba_principal) -> bool:
+        """#80-EF (0000725-37, 04/10/2026): aplica quantidade/valor MENSAL nos
+        REFLEXOS pela seção "Reflexos" da grade de Ocorrências da PRINCIPAL.
+
+        O calculista lançou as horas extras pagas (8,18 h em 05/2021, 10,40 h
+        em 10/2021, 33,18 h em 11/2021, 32,16 h em 12/2021) linha a linha
+        nessa seção; o bot só sabia a quantidade ÚNICA do form do reflexo
+        (média 8,39 h). DOM (doc 07 §3): cada reflexo marcado tem uma
+        subseção `formulario:reflexos:N:` com cabeçalho (nome do reflexo) e
+        linhas `reflexos:N:listagem:M:termoQuantReflexo` /
+        `valorDevidoReflexo` / `valorPagoReflexo`.
+
+        Regras: seção ↔ reflexo casados pelo NOME no cabeçalho (nunca por
+        índice; sem casamento → 🛑, não adivinha); mês da linha pela data no
+        <tr>, senão período do reflexo + M; meses NÃO listados recebem
+        quantidade 0 quando o override traz quantidades (semântica da Fase 5:
+        "não listado = zero"); save verificado; `_ocorrencias_editadas=True`
+        (Sobrescrever global proibido daí em diante); Regerar Manter.
+        """
+        pares = self._reflexos_com_override_mensal(verba_principal)
+        if not pares:
+            return True
+        nome = verba_principal.nome_pjecalc
+        self.log(f"  → #80-EF ocorrências dos reflexos de '{nome}': {len(pares)} reflexo(s) com valores mensais")
+        import re as _re_ef
+        grid_ok = False
+        for tent in range(1, 4):
+            self._aguardar_servidor_ocioso(contexto="#80-EF pré-grade dos reflexos")
+            try:
+                if not self._navegar_menu_via_click("li_calculo_verbas"):
+                    self._navegar_menu("li_calculo_verbas")
+                self._page.wait_for_function(
+                    "() => document.querySelectorAll('a.linkOcorrencias').length > 0", timeout=20000,
+                )
+                self._page.wait_for_timeout(1000)
+            except Exception as _e:
+                self.log(f"    ⚠ #80-EF listagem não ancorou (tent {tent}/3): {str(_e)[:80]}")
+                continue
+            link_id = self._page.evaluate(
+                """(alvo) => {
+                    const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                    const links = [...document.querySelectorAll('a.linkOcorrencias')]
+                        .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+                    for (const a of links) {
+                        const tr = a.closest('tr');
+                        if (!tr) continue;
+                        for (const td of tr.querySelectorAll('td')) {
+                            if (norm(td.textContent.replace(/Exibir|Ocultar/gi,'')) === norm(alvo)) return a.id;
+                        }
+                    }
+                    return null;
+                }""",
+                nome,
+            )
+            if not link_id:
+                self.log(f"    ⚠ #80-EF linkOcorrencias de '{nome}' não encontrado (tent {tent}/3)")
+                continue
+            _esc_ef = link_id.replace(":", "\\:")
+            try:
+                self._page.locator(f"a#{_esc_ef}").click(force=True, timeout=8000)
+            except Exception as _e:
+                self.log(f"    ⚠ #80-EF click linkOcorrencias: {str(_e)[:80]} — JS click")
+                try:
+                    self._page.evaluate("(id) => { const a = document.getElementById(id); if (a) a.click(); }", link_id)
+                except Exception:
+                    pass
+            self._aguardar_ajax(10000)
+            try:
+                self._page.wait_for_selector(
+                    "input[id*=':reflexos:'][id$=':termoQuantReflexo']", timeout=20000,
+                )
+                grid_ok = True
+                break
+            except Exception:
+                self.log(f"    ⚠ #80-EF grade sem seção 'Reflexos' (tent {tent}/3)")
+        if not grid_ok:
+            self.log(f"    🛑 #80-EF grade de ocorrências de '{nome}' sem seção de reflexos — quantidades mensais NÃO aplicadas")
+            return False
+        self._page.wait_for_timeout(1000)
+        secoes = self._page.evaluate(
+            """() => {
+                const secs = {};
+                for (const el of document.querySelectorAll('[id^="formulario:reflexos:"]')) {
+                    const m = el.id.match(/^formulario:reflexos:(\\d+):/); if (!m) continue;
+                    secs[m[1]] = secs[m[1]] || {rows: new Set()};
+                    const r = el.id.match(/:listagem:(\\d+):termoQuantReflexo$/);
+                    if (r) secs[m[1]].rows.add(+r[1]);
+                }
+                const out = [];
+                for (const n of Object.keys(secs)) {
+                    let a = document.querySelector(`[id^="formulario:reflexos:${n}:"]`), txt = '';
+                    while (a && a !== document.body) {
+                        const outros = [...a.querySelectorAll('[id^="formulario:reflexos:"]')]
+                            .filter(e => !e.id.startsWith(`formulario:reflexos:${n}:`));
+                        if (outros.length) break;
+                        txt = a.textContent || ''; a = a.parentElement;
+                    }
+                    const rows = [...secs[n].rows].sort((x, y) => x - y).map(M => {
+                        const inp = document.getElementById(`formulario:reflexos:${n}:listagem:${M}:termoQuantReflexo`);
+                        const tr = inp ? inp.closest('tr') : null;
+                        const mm = tr ? (tr.textContent || '').match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})/) : null;
+                        return {M, mes: mm ? (mm[2] + '/' + mm[3]) : ''};
+                    });
+                    out.push({n, header: txt.replace(/\\s+/g, ' ').trim().slice(0, 400), rows});
+                }
+                return out;
+            }"""
+        )
+        def _norm(s):
+            import unicodedata as _ud
+            t = _ud.normalize("NFD", s or "").encode("ascii", "ignore").decode().upper()
+            return _re_ef.sub(r"\s+", " ", t.replace("º", "").replace("ª", "")).strip()
+        self.log(f"    ℹ #80-EF seções de reflexo na grade: " + "; ".join(
+            f"{s['n']}:{s['header'][:60]}({len(s['rows'])} linhas)" for s in secoes))
+        aplicados = 0
+        usadas: set = set()
+        for r, vms in pares:
+            r_nome = (r.expresso_reflex_alvo or r.nome or "")
+            tipo = _norm(r_nome.split(" SOBRE ")[0] if " SOBRE " in r_nome.upper() else r_nome)
+            cands = [s for s in secoes if s["n"] not in usadas and tipo and tipo in _norm(s["header"])]
+            if len(cands) != 1:
+                self.log(f"    🛑 #80-EF reflexo '{r_nome[:45]}': {len(cands)} seção(ões) casam o tipo '{tipo[:30]}' — não aplicado (não se adivinha)")
+                continue
+            sec = cands[0]
+            usadas.add(sec["n"])
+            n = sec["n"]
+            # mês base para linhas sem data no <tr>
+            ov_r = getattr(r, "parametros_override", None)
+            pi = (getattr(ov_r, "periodo_inicio", None) if ov_r else None) or getattr(verba_principal.parametros, "periodo_inicio", None) or ""
+            _m0 = _re_ef.match(r"\d{2}/(\d{2})/(\d{4})", pi)
+            base = (int(_m0.group(2)), int(_m0.group(1))) if _m0 else None
+            por_mes = {}
+            for o in vms:
+                por_mes[str(o.mes).strip()] = o
+            tem_qtd = any(getattr(o, "quantidade", None) is not None for o in vms)
+            setados = []
+            for i, row in enumerate(sec["rows"]):
+                mes = row["mes"]
+                if not mes and base is not None:
+                    tot = base[0] * 12 + (base[1] - 1) + i
+                    mes = f"{tot % 12 + 1:02d}/{tot // 12}"
+                o = por_mes.get(mes)
+                campos = []
+                if tem_qtd:
+                    q = float(getattr(o, "quantidade", None) or 0) if o is not None else 0.0
+                    campos.append(("termoQuantReflexo", q))
+                if o is not None and getattr(o, "valor_devido", None):
+                    campos.append(("valorDevidoReflexo", float(o.valor_devido)))
+                if o is not None and getattr(o, "valor_pago", None):
+                    campos.append(("valorPagoReflexo", float(o.valor_pago)))
+                for suf, val in campos:
+                    ok = self._page.evaluate(
+                        """([id, valor]) => {
+                            const el = document.getElementById(id);
+                            if (!el) return false;
+                            el.value = valor;
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('blur', {bubbles: true}));
+                            return true;
+                        }""",
+                        [f"formulario:reflexos:{n}:listagem:{row['M']}:{suf}", _fmt_br(val)],
+                    )
+                    if ok and val:
+                        setados.append(f"{mes}:{suf[:5]}={_fmt_br(val)}")
+            self.log(f"    ✓ #80-EF seção {n} '{sec['header'][:40]}': {len(sec['rows'])} linha(s), valores: {setados or 'todos 0'}")
+            aplicados += 1
+        if not aplicados:
+            return False
+        self._aguardar_ajax(3000)
+        salvo = False
+        try:
+            self._clicar_salvar_flex()
+            salvo = bool(self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False))
+        except Exception as _e:
+            self.log(f"    ⚠ #80-EF salvar grade: {str(_e)[:80]}")
+        if salvo:
+            self.log(f"    ✓ #80-EF ocorrências dos reflexos de '{nome}' salvas")
+            self._ocorrencias_editadas = True
+        else:
+            self.log(f"    🛑 #80-EF save das ocorrências dos reflexos de '{nome}' SEM confirmação")
+        try:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(800)
+            if self._regerar_com_modal_confirmacao(sobrescrever=False, log_prefix="    "):
+                self.log("    ✓ Regerar pós-ocorrências dos reflexos")
+        except Exception as _e:
+            self.log(f"    ⚠ Regerar pós-ocorrências dos reflexos: {_e}")
+        return salvo
+
     def _editar_default_historico_para_cs(self, nome: str, valor_brl: float | None = None,
                                             competencia_inicial: str | None = None,
                                             competencia_final: str | None = None) -> None:

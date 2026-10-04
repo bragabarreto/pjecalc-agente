@@ -5915,3 +5915,21 @@ def test_inv170_bot_vinculo_exato_painel_por_linha_proativo_condicional_override
     assert '_clicar("cancelar"' in ov, "save recusado deve cancelar o form (#80-DY)"
     fv = pw.split("def fase_verbas")[1].split("\n    def ")[0]
     assert "self._aplicar_override_reflexo_checkbox(v, r)" in fv
+
+
+def test_inv171_quantidade_mensal_dos_reflexos_na_grade_da_principal():
+    """#80-EF (0000725-37): horas extras pagas por mês vão na seção "Reflexos"
+    da grade de ocorrências da principal (`reflexos:N:listagem:M:termoQuantReflexo`);
+    seção casada pelo NOME do reflexo (nunca por índice); meses não listados = 0;
+    save verificado + `_ocorrencias_editadas` + Regerar Manter."""
+    pw = PLAYWRIGHT_V2
+    assert "def _aplicar_quantidades_mensais_reflexos" in pw
+    sec = pw.split("def _aplicar_quantidades_mensais_reflexos")[1].split("\n    def ")[0]
+    assert "termoQuantReflexo" in sec and "valorDevidoReflexo" in sec and "valorPagoReflexo" in sec
+    assert "não se adivinha" in sec, "seção sem casamento único deve abortar, não chutar"
+    assert "self._ocorrencias_editadas = True" in sec
+    assert "_regerar_com_modal_confirmacao(sobrescrever=False" in sec
+    pos = pw.split("def fase_pos_recentes_correcoes")[1].split("\n    def ")[0]
+    assert "self._aplicar_quantidades_mensais_reflexos(v)" in pos
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "#80-EF" in ext and '"quantidade": 8.18' in ext
