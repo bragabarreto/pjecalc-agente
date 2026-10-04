@@ -364,6 +364,23 @@ depender da grade). Prompt: parcela semestral/anual = INFORMADO +
 > proativo da Fase 5 é GLOBAL: só Expresso com DESLIGAMENTO/período curto e
 > NUNCA após grade INFORMADO editada (apagou o Kit na execução 3).
 
+### 6. Quantidade/valor MENSAL dos reflexos na grade da principal (#80-EF, 04/10/2026)
+
+As horas extras pagas por mês (holerites) iam no form do reflexo Manual como
+quantidade ÚNICA (média). O calculista as lança na seção "Reflexos" da grade
+de Ocorrências da PRINCIPAL (`parametrizar-ocorrencia.xhtml`: `a4j:repeat
+id="reflexos"`, nome em `label.labelOcorrencia` dentro de
+`formulario:reflexos:N:panelReflexo`, linhas
+`reflexos:N:listagem:M:termoQuantReflexo|valorDevidoReflexo|valorPagoReflexo`).
+Agora o reflexo da prévia traz `ocorrencias_override.valores_mensais[]
+.quantidade` (valor_devido opcional) e `_aplicar_quantidades_mensais_reflexos`
+(Fase 5.5) grava linha a linha: seção casada pelo TIPO do nome OU do alvo
+(substring e tokens, sem o %), seção única obrigatória (senão 🛑), meses não
+listados = 0, save verificado, `_ocorrencias_editadas=True`, Regerar Manter.
+Validado na execução 7: 8,18 / 10,40 / 33,18 / 32,16 h → R$ 125,58, idêntico
+ao definitivo do calculista. Alerta esperado do PJE-Calc: "Quantidade alterado
+após a geração das ocorrências" (cosmético). `test_inv171`.
+
 > Ainda em aberto neste caso (ajustes do calculista, não do app): PLR com
 > deduções zeradas e 1º sem/2021 incluído; HE 2023/2024 com o 13º somado na
 > base; periculosidade 2021/2023 e HE sem incidências; 13º sobre diferença
