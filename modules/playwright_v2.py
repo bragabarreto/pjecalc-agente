@@ -2763,12 +2763,25 @@ class PlaywrightAutomatorV2:
                 }
                 const out = [];
                 for (const n of Object.keys(secs)) {
-                    let a = document.querySelector(`[id^="formulario:reflexos:${n}:"]`), txt = '';
-                    while (a && a !== document.body) {
-                        const outros = [...a.querySelectorAll('[id^="formulario:reflexos:"]')]
-                            .filter(e => !e.id.startsWith(`formulario:reflexos:${n}:`));
-                        if (outros.length) break;
-                        txt = a.textContent || ''; a = a.parentElement;
+                    // Run 5: o textContent do container vinha com o <script> do
+                    // SimpleTogglePanel e o nome ficava fora dos 400 chars. O
+                    // nome do reflexo é o <label class="labelOcorrencia"> do
+                    // painel da seção (parametrizar-ocorrencia.xhtml:468,
+                    // `<h:outputLabel styleClass="labelOcorrencia" value="#{reflexo.nome}"/>`).
+                    let txt = '';
+                    const painel = document.getElementById(`formulario:reflexos:${n}:panelReflexo`);
+                    const lbl = painel ? painel.querySelector('.labelOcorrencia') : null;
+                    if (lbl) txt = lbl.textContent || '';
+                    if (!txt) {
+                        let a = document.querySelector(`[id^="formulario:reflexos:${n}:"]`);
+                        while (a && a !== document.body) {
+                            const outros = [...a.querySelectorAll('[id^="formulario:reflexos:"]')]
+                                .filter(e => !e.id.startsWith(`formulario:reflexos:${n}:`));
+                            if (outros.length) break;
+                            const l2 = a.querySelector('.labelOcorrencia');
+                            if (l2) { txt = l2.textContent || ''; break; }
+                            a = a.parentElement;
+                        }
                     }
                     const rows = [...secs[n].rows].sort((x, y) => x - y).map(M => {
                         const inp = document.getElementById(`formulario:reflexos:${n}:listagem:${M}:termoQuantReflexo`);
