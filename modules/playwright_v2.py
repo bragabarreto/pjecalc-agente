@@ -2774,7 +2774,23 @@ class PlaywrightAutomatorV2:
                         const m = inp.id.match(/^formulario:listagem:(\d+):termoQuant$/); if (!m) continue;
                         const M = +m[1];
                         const tr = inp.closest('tr');
-                        const mm = tr ? (tr.textContent || '').match(/(\d{2})\/(\d{2})\/(\d{4})/) : null;
+                        // 5ª execução (09/10/2026): a data da linha vive no INPUT dataInicial
+                        // (value), não no textContent do <tr> — sem ela o mês ficava vazio:
+                        // fração 1,0 em todos os meses e pago nunca casado.
+                        const re = /(\\d{2})\\/(\\d{2})\\/(\\d{4})/;
+                        let data = '';
+                        if (tr) {
+                            const di = tr.querySelector('[id$=":dataInicial"], [id*=":dataInicial"]');
+                            if (di) data = (di.value || di.textContent || '').trim();
+                            if (!re.test(data)) {
+                                for (const el of tr.querySelectorAll('td, input, span')) {
+                                    const t = (el.value || el.textContent || '').trim();
+                                    const mm0 = t.match(re);
+                                    if (mm0) { data = mm0[0]; break; }
+                                }
+                            }
+                        }
+                        const mm = data.match(re);
                         const pg = document.getElementById(`formulario:listagem:${M}:valorPago`);
                         const cb = tr ? tr.querySelector("input[type=checkbox][id$=':ativo']") : null;
                         const num = s => parseFloat((s||'0').replace(/\./g,'').replace(',','.')) || 0;
@@ -2789,6 +2805,14 @@ class PlaywrightAutomatorV2:
         if not linhas:
             self.log(f"    🛑 #80-EH grade de '{nome}' vazia")
             return False
+        _pi0 = _re.match(r"\d{2}/(\d{2})/(\d{4})", getattr(p, "periodo_inicio", "") or "")
+        if _pi0 and any(not r["mes"] for r in linhas):
+            _b = int(_pi0.group(2)) * 12 + int(_pi0.group(1)) - 1
+            for i2, r in enumerate(linhas):
+                if not r["mes"]:
+                    tot = _b + i2
+                    r["mes"] = f"{tot % 12 + 1:02d}/{tot // 12}"
+            self.log(f"    ℹ #80-EH grade de '{nome}' sem data nas linhas — meses derivados do período (início {getattr(p, 'periodo_inicio', '')})")
         soma_q = sum(r["qtd"] for r in linhas)
         soma_p = sum((r["pago"] or 0) for r in linhas)
         self.log(f"    ℹ #80-EH grade de '{nome}': {len(linhas)} linha(s), Σquantidade={soma_q:g}, Σpago={soma_p:.2f}")
