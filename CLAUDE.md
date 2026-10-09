@@ -457,16 +457,45 @@ filtradas (#80-CM) e, na reexecução de 09/10/2026, matou a conversa (sidebar
 sumiu, Liquidar por URL → 500). `_regerar_com_modal_confirmacao` passou a
 logar "modal não apareceu" e a verificar o radio Sobrescrever.
 
-> **Prévia (decisão de modelagem, 08/10/2026):** a IA integrou o salário
-> por fora (R$ 200) na base do 13º/2026, das FÉRIAS 2025/26 e do AVISO
-> (MAIOR_REMUNERAÇÃO 1.906,87) E manteve os reflexos "sobre DIFERENÇA
+### 5. Grade STALE de verba CALCULADO: quantidade/pago gravados mês a mês (#80-EH)
+
+Na 3ª execução (09/10/2026) HE 50% (INFORMADA 24,5 + valor pago CALCULADO
+sobre HORAS EXTRAS PAGAS) e HE 100% liquidaram R$ 0: a fórmula estava certa
+no PJC, mas as ocorrências ficaram com quantidade 0 e pago 0 — o "✓ Regerar
+pós-parâmetros [Sobrescrever]" (modal confirmada) NÃO as regenerou. Alertas:
+"O parâmetro Quantidade foi alterado após a geração das ocorrências",
+"divergência entre o valor pago das ocorrências e as marcações", "Todas as
+ocorrências ... salvas com quantidade igual a zero". No corpus o mesmo fluxo
+propaga (1323c017: 8,67 × 14 meses = 107,5) — a causa server-side não foi
+isolada (H2 e logs do Tomcat são ZERADOS a cada restart do container; o PJC
+é a única verdade-terreno pós-run). Fix: `_garantir_ocorrencias_principal_calculado`
+(fase pós-Recentes) lê a grade (`formulario:listagem:M:termoQuant` /
+`:valorPago`) e, SÓ com Σ=0, grava a semântica da prévia: quantidade × fração
+de dias do mês no período e o pago da competência pelo histórico (base +
+evolução). Save verificado, `_ocorrencias_editadas=True`, Regerar Manter.
+IMPORTADA_DO_CARTAO zerada → 🛑. `test_inv175`.
+
+> ⚠️ **Cartão de ponto só com DOMINGOS (1/mês) é imprevisível**: a apuração
+> reconheceu "Repousos Trabalhados" em 1 dos 34 domingos lançados por
+> override (10/2023) e contou os demais ora como hora normal, ora nada. Quando
+> a sentença FIXA a quantidade ("1 domingo por mês, 5 horas"), lançar HE 100%
+> com quantidade INFORMADA (5 h/mês) é exato e dispensa o cartão.
+
+> **Prévia (decisões de modelagem, 08–09/10/2026):** (a) a IA integrou o
+> salário por fora (R$ 200) na base do 13º/2026, das FÉRIAS 2025/26 e do
+> AVISO (MAIOR_REMUNERAÇÃO 1.906,87) E manteve os reflexos "sobre DIFERENÇA
 > SALARIAL" — a mesma parcela entrava duas vezes nas rescisórias de 2026
 > (~R$ 530). Rescisórias ficam na base SALÁRIO BASE; os reflexos da
-> DIFERENÇA carregam o R$ 200 em todos os anos (é o que a Etapa 1 da própria
-> IA descrevia: "proporcional 2026 + reflexos do extrafolha nos anos
-> anteriores"). A DIFERENÇA fica `proporcionaliza=NAO` (a ocorrência de
-> 04/2026, com 1 dia, tem de valer R$ 200 inteiros para o reflexo de AVISO
-> com Comportamento VALOR MENSAL).
+> DIFERENÇA carregam o R$ 200 em todos os anos. (b) Reflexos de parcela FIXA
+> (R$ 200/mês) ficam no Comportamento padrão VALOR MENSAL — MÉDIA PELO
+> VALOR deu 13º/2026 = 550 e férias PA 25/26 = 927 (bases 1.650 / 758,68
+> sem sentido). (c) A DIFERENÇA mantém `proporcionaliza=SIM`: o PJE-Calc
+> NORMALIZA a ocorrência para valor mensal (com NAO, 1 dia de 04/2026 =
+> R$ 200 virou base 6.000 e aviso-reflexo de R$ 7.200). (d) SALDO DE
+> SALÁRIO de março com dispensa em 01/04: ocorrência DESLIGAMENTO cai em
+> abril (1 dia = R$ 63,56); MENSAL 01/03→01/04 proporcionalizado paga março
+> inteiro + 1 dia. (e) Dedução global das HE pagas em UMA verba (HE 50%):
+> referenciar o mesmo histórico no valor pago das duas HE deduz duas vezes.
 
 > ⚠️ O H2 do cálculo 106 foi EDITADO à mão depois do run (demissão/término
 > 19/06/2026 às 20:07–20:20 BRT) — ao auditar, use o log + access log, não o
