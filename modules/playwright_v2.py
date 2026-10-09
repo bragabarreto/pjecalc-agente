@@ -3698,48 +3698,40 @@ class PlaywrightAutomatorV2:
         if not linhas:
             self.log(f"    🛑 #80-CX grade vazia em '{nome}'")
             return
-        # #80-EG (0000448-36, 08/10/2026): ocorrência FORA do período da verba
-        # na grade = o Regerar pós-parâmetros (que estreitou o período, #80-CY)
-        # não rodou ou foi inerte — o PJE-Calc só filtra os PAs pela data ao
-        # (re)gerar. Sem regerar, a liquidação trava ("Todas as ocorrências da
-        # verba FÉRIAS + 1/3 devem estar contidas no período") e o #80-CX
-        # aborta por contagem (2 elegíveis × 3 linhas). Regerar SOBRESCREVER
-        # (global — só quando nenhuma grade INFORMADO foi editada) e reler,
-        # antes de decidir. Nunca silencioso.
-        def _fora_do_periodo(ls):
-            out = []
-            for r in ls:
-                d = _p(r.get("dataInicial"))
-                if d and (d < pi_d or d > pf_d):
-                    out.append(r)
-            return out
-        _fora_per = _fora_do_periodo(linhas)
-        if _fora_per and not getattr(self, "_ocorrencias_editadas", False):
-            self.log(f"    ⟳ #80-EG {len(_fora_per)} ocorrência(s) FORA do período {pi}→{pf} na grade "
-                     f"de '{nome}' ({[r.get('dataInicial') for r in _fora_per]}) — Regerar Sobrescrever + releitura")
-            try:
-                self._aguardar_servidor_ocioso(f"#80-EG pré-regerar '{nome}'")
-            except Exception:
-                pass
-            self._regerar_ocorrencias_verbas(sobrescrever=True)
-            try:
-                self._aguardar_servidor_ocioso(f"#80-EG pós-regerar '{nome}'")
-            except Exception:
-                pass
-            if not self._abrir_ocorrencias_da_verba(v):
-                self.log(f"    🛑 #80-EG não reabriu as ocorrências de '{nome}' após o Regerar")
-                return
-            linhas = sorted(self._ler_ocorrencias_da_grade(), key=lambda r: r["idx"])
-            _fora_per = _fora_do_periodo(linhas)
-            if _fora_per:
-                self.log(f"    🛑 #80-EG ocorrências fora do período PERSISTEM após Regerar Sobrescrever "
-                         f"({[r.get('dataInicial') for r in _fora_per]}) — a liquidação vai travar; "
-                         f"conferir o período da verba '{nome}' no PJE-Calc")
-            else:
-                self.log(f"    ✓ #80-EG grade de '{nome}' regerada dentro do período ({len(linhas)} linha(s))")
-        elif _fora_per:
-            self.log(f"    ⚠ #80-EG {len(_fora_per)} ocorrência(s) fora do período em '{nome}', mas há grade "
-                     f"INFORMADO editada — Regerar Sobrescrever NÃO é seguro; a liquidação pode travar")
+        # #80-EG (0000448-36, 08–09/10/2026): o PJE-Calc NÃO remove, ao
+        # regerar, a ocorrência de PA cuja data ficou ANTES do período
+        # estreitado (#80-CY) — a grade continua com ela (21/05/2025 com
+        # período 20/06/2025→01/04/2026, mesmo após Regerar SOBRESCREVER com a
+        # modal confirmada). Com ela ATIVA a liquidação trava ("Todas as
+        # ocorrências da verba FÉRIAS + 1/3 devem estar contidas no período");
+        # ZERADA/INATIVA ela passa (6d8fdc29, 09/09/2026: linha 02/01/2026 <
+        # período 03/01/2026 zerada pelo #80-CX → totalErros=0). Regerar global
+        # aqui é PROIBIDO: reativa as ocorrências do 13º já filtradas (#80-CM)
+        # e matou a conversa (500 LockTimeout) na reexecução de 09/10/2026.
+        # Remédio: quando a contagem estrita não bate, casar a grade com a lista
+        # AMPLA (PAs com ocorrência ≤ periodo_fim, inclusive antes do início);
+        # PA antes do período nunca é deferido (o #80-CY só estreita para
+        # excluir indevidos) → é zerado como os demais não deferidos.
+        if len(elegiveis) != len(linhas):
+            amplo = []
+            for pa in pas:
+                d = pa.model_dump() if hasattr(pa, "model_dump") else dict(pa)
+                ini = _p(d.get("periodo_aquisitivo_inicio"))
+                if not ini:
+                    continue
+                ocor = _fer_data_ocorrencia(d, dem_d)
+                if ocor and ocor <= pf_d:
+                    amplo.append((ini, _fer_deferido(d) and ocor >= pi_d, ocor))
+            amplo.sort(key=lambda x: x[0])
+            if len(amplo) == len(linhas):
+                _antes = [e for e in amplo if e[2] < pi_d]
+                self.log(
+                    f"    ℹ #80-EG grade de '{nome}' com {len(linhas)} linha(s) × {len(elegiveis)} "
+                    f"PA(s) no período — casando pela lista AMPLA ({len(amplo)} PA(s); "
+                    f"{len(_antes)} anterior(es) ao período: "
+                    f"{[(e[0].strftime('%d/%m/%Y'), e[2].strftime('%d/%m/%Y')) for e in _antes]} → zerados)"
+                )
+                elegiveis = amplo
         # #80-DF: linha k = k-ésimo PA elegível. Se as contagens não batem, o
         # modelo não descreve esta grade — abortar em vez de adivinhar (zerar a
         # linha errada é SUBCÁLCULO, o erro que este filtro existe p/ evitar).
@@ -12318,7 +12310,9 @@ class PlaywrightAutomatorV2:
             if st.get("btn") and _idle and not st.get("aguarde"):
                 # botão ainda visível, rede ociosa, sem 'Aguarde' = click inerte
                 _ociosos += 1
-                if _ociosos >= 3 and _recliques < 2:
+                # a resposta do Apurar levou 42 s com a rede "ociosa" (09/10/2026):
+                # re-clicar cedo dispara apuração em DUPLICIDADE. Só após ~80 s.
+                if _ociosos >= 20 and _recliques < 2:
                     _recliques += 1
                     self.log(f"    ⟳ #80-EG Apurar sem resposta (página ociosa, botão ainda visível) — re-click {_recliques}/2")
                     _clicar_apurar()

@@ -438,18 +438,24 @@ Repousos Trabalhados / Dias Trabalhados. Normalizer
 prévia para verbas com 100%/DOMINGO/FERIADO/REPOUSO/DSR no nome; o bot prefere
 a label declarada (`_norm_ascii`, sem acento) e só depois a heurística.
 
-### 4. FÉRIAS: ocorrência FORA do período estreitado ⇒ Regerar Sobrescrever antes do #80-CX
+### 4. FÉRIAS: ocorrência FORA do período estreitado ⇒ casar pela lista AMPLA e ZERAR (nunca Regerar)
 
-O #80-CY estreitou o período (20/06/2025→01/04/2026) e o Regerar pós-parâmetros
-"passou" sem regerar (a modal pode não aparecer e a função retornava True em
-silêncio): a grade manteve o PA 2023/24 (21/05/2025), o #80-CX abortou "2
-elegíveis × 3 linhas" e a liquidação travou. No corpus (52 runs com #80-CX) o
-PJE-Calc filtra os PAs pela data ao regerar — este run foi o único com o erro.
-Fix: `_filtrar_ferias_por_periodo_aquisitivo` detecta linha com data fora de
-`[periodo_inicio, periodo_fim]`, faz `_regerar_ocorrencias_verbas(sobrescrever=True)`
-(só sem grade INFORMADO editada) e relê; persistindo, 🛑 explícito.
-`_regerar_com_modal_confirmacao` loga "modal não apareceu" e verifica o radio
-Sobrescrever.
+O #80-CY estreitou o período (20/06/2025→01/04/2026) e a grade manteve o PA
+2023/24 (gozo 21/05/2025) — **mesmo após Regerar SOBRESCREVER com a modal
+confirmada** (reexecução de 09/10/2026). O PJE-Calc NÃO remove, ao regerar, a
+ocorrência de PA cuja data ficou antes do período; com ela ATIVA a liquidação
+trava ("Todas as ocorrências da verba FÉRIAS + 1/3 devem estar contidas no
+período"); ZERADA/INATIVA ela passa (6d8fdc29, 09/09/2026: linha 02/01/2026 <
+período 03/01/2026 zerada pelo #80-CX → totalErros=0). O #80-CX abortava por
+contagem ("2 elegíveis × 3 linhas"). Fix em
+`_filtrar_ferias_por_periodo_aquisitivo`: quando a contagem estrita não bate,
+casar a grade com a lista AMPLA (PAs com ocorrência ≤ `periodo_fim`, inclusive
+antes do início — nunca deferidos, pois o #80-CY só estreita para excluir
+indevidos) e zerá-los como os demais não deferidos.
+⚠ **Regerar global na Fase 14 é PROIBIDO**: reativa as ocorrências do 13º já
+filtradas (#80-CM) e, na reexecução de 09/10/2026, matou a conversa (sidebar
+sumiu, Liquidar por URL → 500). `_regerar_com_modal_confirmacao` passou a
+logar "modal não apareceu" e a verificar o radio Sobrescrever.
 
 > **Prévia (decisão de modelagem, 08/10/2026):** a IA integrou o salário
 > por fora (R$ 200) na base do 13º/2026, das FÉRIAS 2025/26 e do AVISO

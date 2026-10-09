@@ -6019,9 +6019,9 @@ def test_inv174_apuracao_do_cartao_click_nativo_e_espera_pelo_resultado():
     assert "re-click" in ap and '_aguardar_servidor_ocioso("pós-apuração do cartão (#80-EG)")' in ap
     assert "self._aguardar_ajax(120000)" not in ap, "espera cega de 120s removida"
     cx = pw.split("def _filtrar_ferias_por_periodo_aquisitivo")[1].split("\n    def ")[0]
-    assert "_fora_do_periodo(linhas)" in cx
-    assert "self._regerar_ocorrencias_verbas(sobrescrever=True)" in cx
-    assert 'getattr(self, "_ocorrencias_editadas", False)' in cx, "Sobrescrever é global: nunca após grade INFORMADO editada"
+    assert "casando pela lista AMPLA" in cx, "grade com PA anterior ao período estreitado deve casar pela lista ampla e zerar"
+    assert "_regerar_ocorrencias_verbas(sobrescrever=True)" not in cx, "Regerar global antes do Liquidar reativa o 13º filtrado (#80-CM) e matou a conversa"
+    assert "_ociosos >= 20" in ap, "re-click do Apurar só após ~80 s ocioso (duplicidade)"
     rg = pw.split("def _regerar_com_modal_confirmacao")[1].split("\n    def ")[0]
     assert "o Regerar pode NÃO ter rodado" in rg, "modal ausente nunca silencioso"
     assert "não marcado — Regerar sairá como MANTER" in rg
