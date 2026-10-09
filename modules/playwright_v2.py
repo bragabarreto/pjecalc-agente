@@ -2658,6 +2658,244 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"  ⚠ #80-EF ocorrências dos reflexos de '{v.nome_pjecalc}': {e}")
 
+        # #80-EH: verba CALCULADO MENSAL cuja grade ficou STALE (Regerar não
+        # propagou quantidade INFORMADA / valor pago CALCULADO) — escrever na
+        # grade exatamente a semântica da prévia. Só age quando Σ = 0.
+        for v in self.previa.verbas_principais:
+            try:
+                self._garantir_ocorrencias_principal_calculado(v)
+            except Exception as e:
+                self.log(f"  ⚠ #80-EH ocorrências de '{v.nome_pjecalc}': {e}")
+
+    def _garantir_ocorrencias_principal_calculado(self, v) -> bool:
+        """#80-EH (0000448-36, 09/10/2026): garante que a grade de ocorrências
+        de uma verba CALCULADO MENSAL reflete a prévia quando o Regerar
+        pós-parâmetros NÃO regenerou (PJE-Calc deixou as ocorrências do
+        Expresso: quantidade 0 e pago 0). Sintomas na liquidação: "O parâmetro
+        Quantidade foi alterado após a geração das ocorrências", "Há divergência
+        entre os valores gravados no campo valor pago das ocorrências e os
+        valores resultantes das marcações" e "Todas as ocorrências ... foram
+        salvas com quantidade igual a zero" — HE 50% e HE 100% liquidaram R$ 0
+        com a fórmula correta (INFORMADA 24,5 / valor pago CALCULADO).
+
+        Só age quando a grade está STALE (soma das quantidades = 0 com
+        quantidade INFORMADA > 0 na prévia; soma do pago = 0 com valor pago
+        CALCULADO sobre histórico que tem valores). Escreve na grade
+        (`formulario:listagem:M:termoQuant` / `:valorPago`,
+        parametrizar-ocorrencia.xhtml:247/296) exatamente a semântica da
+        prévia: quantidade mensal INFORMADA proporcional aos dias do mês no
+        período (como o PJE-Calc faz ao gerar — 1323c017: 8,67 × 14 meses =
+        107,5) e o pago de cada competência lido do histórico (valor base +
+        evolução, cada degrau vale até o próximo). Save verificado,
+        `_ocorrencias_editadas=True`, Regerar Manter. IMPORTADA_DO_CARTAO com
+        grade zerada → 🛑 (não se adivinha a coluna do cartão).
+        """
+        import re as _re
+        from datetime import datetime as _dt, timedelta as _td
+        import calendar as _cal
+        p = v.parametros
+        if getattr(p, "valor", None) != TipoValor.CALCULADO:
+            return True
+        if str(getattr(p, "ocorrencia_pagamento", "") or "") != "MENSAL":
+            return True
+        fc = getattr(p, "formula_calculado", None)
+        q = getattr(fc, "quantidade", None) if fc else None
+        q_tipo = str(getattr(q, "tipo", "") or "")
+        q_tipo = q_tipo.split(".")[-1]
+        q_val = float(getattr(q, "valor", 0) or 0) if q is not None else 0.0
+        vp = getattr(p, "valor_pago", None)
+        vp_tipo = str(getattr(vp, "tipo", "") or "").split(".")[-1]
+        vp_hist = getattr(vp, "base_historico_nome", None) if vp is not None else None
+        quer_qtd = q_tipo in ("INFORMADA", "IMPORTADA_DO_CARTAO") and (q_tipo == "IMPORTADA_DO_CARTAO" or q_val > 0)
+        quer_pago = vp_tipo == "CALCULADO" and bool(vp_hist)
+        if not quer_qtd and not quer_pago:
+            return True
+        nome = v.nome_pjecalc
+        cands = [c for c in {v.nome_pjecalc, getattr(v, "expresso_alvo", None)} if c]
+        grid_ok = False
+        for tent in range(1, 4):
+            self._aguardar_servidor_ocioso(contexto=f"#80-EH pré-grade '{nome}'")
+            try:
+                if not self._navegar_menu_via_click("li_calculo_verbas"):
+                    self._navegar_menu("li_calculo_verbas")
+                self._page.wait_for_function(
+                    "() => document.querySelectorAll('a.linkOcorrencias').length > 0", timeout=20000,
+                )
+                self._page.wait_for_timeout(800)
+            except Exception as _e:
+                self.log(f"    ⚠ #80-EH listagem não ancorou (tent {tent}/3): {str(_e)[:80]}")
+                continue
+            link_id = self._page.evaluate(
+                """(cands) => {
+                    const norm = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/\s+/g,' ').trim();
+                    const alvos = cands.map(norm);
+                    const links = [...document.querySelectorAll('a.linkOcorrencias')]
+                        .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+                    for (const a of links) {
+                        const tr = a.closest('tr'); if (!tr) continue;
+                        for (const td of tr.querySelectorAll('td')) {
+                            if (alvos.includes(norm(td.textContent.replace(/Exibir|Ocultar/gi,'')))) return a.id;
+                        }
+                    }
+                    return null;
+                }""",
+                cands,
+            )
+            if not link_id:
+                self.log(f"    ⚠ #80-EH linkOcorrencias de '{nome}' não encontrado (tent {tent}/3)")
+                continue
+            _esc = link_id.replace(":", "\\:")
+            try:
+                self._page.locator(f"a#{_esc}").click(force=True, timeout=8000)
+            except Exception:
+                try:
+                    self._page.evaluate("(id) => { const a = document.getElementById(id); if (a) a.click(); }", link_id)
+                except Exception:
+                    pass
+            self._aguardar_ajax(10000)
+            try:
+                self._page.wait_for_selector("input[id^='formulario:listagem:'][id$=':termoQuant']", timeout=20000)
+                grid_ok = True
+                break
+            except Exception:
+                self.log(f"    ⚠ #80-EH grade de '{nome}' sem linhas (tent {tent}/3)")
+        if not grid_ok:
+            self.log(f"    🛑 #80-EH grade de ocorrências de '{nome}' não abriu — ocorrências podem estar zeradas (quantidade/pago)")
+            return False
+        self._page.wait_for_timeout(800)
+
+        def _ler():
+            return self._page.evaluate(
+                """() => {
+                    const out = [];
+                    for (const inp of document.querySelectorAll("input[id^='formulario:listagem:'][id$=':termoQuant']")) {
+                        const m = inp.id.match(/^formulario:listagem:(\d+):termoQuant$/); if (!m) continue;
+                        const M = +m[1];
+                        const tr = inp.closest('tr');
+                        const mm = tr ? (tr.textContent || '').match(/(\d{2})\/(\d{2})\/(\d{4})/) : null;
+                        const pg = document.getElementById(`formulario:listagem:${M}:valorPago`);
+                        const cb = tr ? tr.querySelector("input[type=checkbox][id$=':ativo']") : null;
+                        const num = s => parseFloat((s||'0').replace(/\./g,'').replace(',','.')) || 0;
+                        out.push({M, data: mm ? mm[0] : '', mes: mm ? (mm[2] + '/' + mm[3]) : '',
+                                  qtd: num(inp.value), pago: pg ? num(pg.value) : null,
+                                  ativo: cb ? cb.checked : null});
+                    }
+                    return out.sort((a, b) => a.M - b.M);
+                }"""
+            ) or []
+        linhas = _ler()
+        if not linhas:
+            self.log(f"    🛑 #80-EH grade de '{nome}' vazia")
+            return False
+        soma_q = sum(r["qtd"] for r in linhas)
+        soma_p = sum((r["pago"] or 0) for r in linhas)
+        self.log(f"    ℹ #80-EH grade de '{nome}': {len(linhas)} linha(s), Σquantidade={soma_q:g}, Σpago={soma_p:.2f}")
+
+        def _p(x):
+            try:
+                return _dt.strptime(x, "%d/%m/%Y")
+            except Exception:
+                return None
+        pi, pf = _p(getattr(p, "periodo_inicio", "") or ""), _p(getattr(p, "periodo_fim", "") or "")
+
+        def _frac_mes(mes):
+            # fração do mês coberta pelo período da verba (dias no período / dias do mês)
+            try:
+                mm, aa = int(mes[:2]), int(mes[3:7])
+            except Exception:
+                return 1.0
+            ndias = _cal.monthrange(aa, mm)[1]
+            ini = _dt(aa, mm, 1); fim = _dt(aa, mm, ndias)
+            if pi and pi > ini: ini = pi
+            if pf and pf < fim: fim = pf
+            if fim < ini: return 0.0
+            return ((fim - ini).days + 1) / ndias
+
+        # pago por competência a partir do histórico da prévia (valor base + evolução)
+        pago_por_mes = {}
+        if quer_pago:
+            hist = None
+            for h in (self.previa.historico_salarial or []):
+                if self._norm_ascii(h.nome) == self._norm_ascii(vp_hist):
+                    hist = h; break
+            if hist is None:
+                self.log(f"    ⚠ #80-EH histórico '{vp_hist}' do valor pago não está na prévia")
+                quer_pago = False
+            else:
+                degraus = []
+                ev = getattr(hist, "evolucao", None) or []
+                for e in ev:
+                    c = str(getattr(e, "competencia", "") or "")
+                    try:
+                        degraus.append((int(c[3:7]) * 12 + int(c[:2]) - 1, float(getattr(e, "valor_brl", 0) or 0)))
+                    except Exception:
+                        pass
+                degraus.sort()
+                base_val = float(getattr(hist, "valor_brl", 0) or 0)
+                ci, cf = str(hist.competencia_inicial or ""), str(hist.competencia_final or "")
+                def _ym(c):
+                    try: return int(c[3:7]) * 12 + int(c[:2]) - 1
+                    except Exception: return None
+                ymi, ymf = _ym(ci), _ym(cf)
+                for r in linhas:
+                    ym = _ym(r["mes"]) if r["mes"] else None
+                    if ym is None or (ymi is not None and ym < ymi) or (ymf is not None and ym > ymf):
+                        pago_por_mes[r["M"]] = 0.0
+                        continue
+                    val = base_val
+                    for d_ym, d_val in degraus:
+                        if d_ym <= ym:
+                            val = d_val
+                    pago_por_mes[r["M"]] = val
+        escritos = []
+        if quer_qtd and soma_q == 0:
+            if q_tipo == "IMPORTADA_DO_CARTAO":
+                self.log(f"    🛑 #80-EH '{nome}': quantidade IMPORTADA_DO_CARTAO com grade ZERADA — o Regerar não propagou o cartão; conferir no PJE-Calc (não se adivinha a coluna)")
+            else:
+                for r in linhas:
+                    qv = round(q_val * _frac_mes(r["mes"]), 4) if r["mes"] else q_val
+                    escritos.append((f"formulario:listagem:{r['M']}:termoQuant", qv))
+        if quer_pago and soma_p == 0 and any(x > 0 for x in pago_por_mes.values()):
+            for r in linhas:
+                escritos.append((f"formulario:listagem:{r['M']}:valorPago", pago_por_mes.get(r["M"], 0.0)))
+        if not escritos:
+            self.log(f"    ✓ #80-EH grade de '{nome}' já reflete a prévia — nada a fazer")
+            return True
+        for _id, val in escritos:
+            self._page.evaluate(
+                """([id, valor]) => {
+                    const el = document.getElementById(id);
+                    if (!el) return false;
+                    el.value = valor;
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                    return true;
+                }""",
+                [_id, _fmt_br(val)],
+            )
+        nq = sum(1 for i, _ in escritos if i.endswith(":termoQuant")); npg = len(escritos) - nq
+        self.log(f"    → #80-EH '{nome}': {nq} quantidade(s) e {npg} valor(es) pago escritos na grade (grade estava stale)")
+        self._aguardar_ajax(3000)
+        salvo = False
+        try:
+            self._clicar_salvar_flex()
+            salvo = bool(self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False))
+        except Exception as _e:
+            self.log(f"    ⚠ #80-EH salvar grade: {str(_e)[:80]}")
+        if not salvo:
+            self.log(f"    🛑 #80-EH save da grade de '{nome}' SEM confirmação — quantidade/pago podem seguir zerados")
+            return False
+        self._ocorrencias_editadas = True
+        # releitura (ground truth do bean) — reabrir a grade
+        try:
+            self._navegar_menu("li_calculo_verbas"); self._aguardar_ajax(6000); self._page.wait_for_timeout(800)
+            if self._regerar_com_modal_confirmacao(sobrescrever=False, log_prefix="    "):
+                self.log(f"    ✓ Regerar (Manter) pós-grade de '{nome}'")
+        except Exception as _e:
+            self.log(f"    ⚠ #80-EH Regerar pós-grade: {_e}")
+        self.log(f"    ✓ #80-EH ocorrências de '{nome}' gravadas: Σqtd={sum(v for i, v in escritos if i.endswith(':termoQuant')):g} Σpago={sum(v for i, v in escritos if i.endswith(':valorPago')):.2f}")
+        return True
+
     def _reflexos_com_override_mensal(self, verba_principal) -> list:
         """#80-EF: reflexos da principal com `ocorrencias_override.valores_mensais`
         trazendo quantidade/valor por mês (ex.: horas extras pagas nos holerites)."""

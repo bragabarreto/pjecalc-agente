@@ -6029,3 +6029,22 @@ def test_inv174_apuracao_do_cartao_click_nativo_e_espera_pelo_resultado():
     assert "EXCEÇÃO: pode estender até 90 dias" not in ext
     assert "`periodo_fim = data_demissao` — NUNCA a data projetada" in ext
 
+
+def test_inv175_grade_stale_de_calculado_recebe_quantidade_e_pago_da_previa():
+    """#80-EH (0000448-36, 09/10/2026): o Regerar pós-parâmetros não propagou a
+    quantidade INFORMADA (24,5) nem o valor pago CALCULADO (histórico HORAS
+    EXTRAS PAGAS) às ocorrências de HE 50%/100% — liquidaram R$ 0 com alertas
+    "Quantidade alterada após a geração" / "quantidade igual a zero". Pós-
+    Recentes, o bot lê a grade e, se Σqtd=0/Σpago=0, grava mês a mês o que a
+    prévia declara (quantidade proporcional aos dias do mês; pago do histórico)."""
+    pw = PLAYWRIGHT_V2
+    assert "def _garantir_ocorrencias_principal_calculado" in pw
+    sec = pw.split("def _garantir_ocorrencias_principal_calculado")[1].split("\n    def ")[0]
+    assert "':termoQuant'" in sec and ":valorPago" in sec
+    assert "soma_q == 0" in sec and "soma_p == 0" in sec, "só age com a grade stale"
+    assert "_frac_mes" in sec, "quantidade proporcional aos dias do mês no período"
+    assert "self._ocorrencias_editadas = True" in sec
+    assert "IMPORTADA_DO_CARTAO com grade ZERADA" in sec, "cartão zerado nunca é adivinhado"
+    pos = pw.split("def fase_pos_recentes_correcoes")[1].split("\n    def ")[0]
+    assert "self._garantir_ocorrencias_principal_calculado(v)" in pos
+
