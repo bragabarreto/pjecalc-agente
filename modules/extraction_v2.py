@@ -763,7 +763,7 @@ diferentes de Mensal"_ quando:
 | Verba rescisória dentro do contrato (Saldo Salário, 13º proporcional, Férias+1/3 proporcionais, Aviso Prévio Indenizado) | `periodo_fim ≤ data_demissao` |
 | Avos de 13º do ano da demissão | `periodo_inicio = 01/01/{ano_demissão}`, `periodo_fim = data_demissao` |
 | Avos de Férias do período aquisitivo aberto | `periodo_fim = data_demissao` |
-| Aviso Prévio Indenizado projetado (Lei 12.506/2011) | EXCEÇÃO: pode estender até 90 dias após demissão |
+| Aviso Prévio Indenizado (Lei 12.506/2011) | `periodo_inicio` = 1º dia do mês da demissão, `periodo_fim = data_demissao` — NUNCA a data projetada (o PJE-Calc RECUSA o save: "A data final não pode ser maior que a data demissão"). A projeção vai em `parametros_calculo.projeta_aviso_indenizado=true` + `data_termino_calculo` = demissão + dias do aviso |
 | Verba pós-contratual (Estabilidade Gestante/Acidentária, Lei 9.029) | `ocorrencia_pagamento = MENSAL` (não DESLIGAMENTO) + `periodo_fim` ≤ data_termino_calculo |
 
 **❌ ERRADO**: `13º SALÁRIO` com `ocorrencia=DEZEMBRO` + `periodo_fim=23/01/2026` (data ajuizamento, posterior à demissão 27/11/2025)

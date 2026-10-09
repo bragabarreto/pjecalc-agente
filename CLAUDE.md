@@ -388,6 +388,86 @@ após a geração das ocorrências" (cosmético). `test_inv171`.
 
 ---
 
+## Regras obrigatórias — 4 fixes do caso GIRLANIA (0000448-36, 08/10/2026) — #80-EG — NÃO REVERTER
+
+> Auditoria sentença → prévia → log → H2 → access log do Tomcat. O run
+> terminou SEM PJC ("Todas as ocorrências da verba FÉRIAS + 1/3 devem estar
+> contidas no período"), com o 13º AUSENTE, o AVISO PRÉVIO com os defaults do
+> Expresso e a HE 100% zerada. Quatro causas, todas estruturais. Testes
+> `test_inv172`–`test_inv174` + `test_prompt_invariants::test_aviso_previo_periodo_fim_na_demissao`.
+
+### 1. "13 SALARIO" (sem º) rebaixava o 13º para MANUAL
+
+A IA emitiu `expresso_alvo="13 SALARIO"`; `resolver_verba_expresso` não casava
+"13º SALÁRIO" e o #80-AR rebaixou a verba para `manual`. O form Manual morreu
+3× ("#80-BV form Manual morreu durante o A4J da base" — POST 500 `Timeout
+trying to lock table TBVERBACALCULO`) e o cálculo liquidou sem o 13º. Fix:
+`_normalizar_estrita` ignora o indicador ordinal (º/ª/°), o "o" após dígito e
+mapeia "DÉCIMO TERCEIRO" → "13". **13º e FÉRIAS são SEMPRE Expresso.**
+
+### 2. AVISO PRÉVIO: `periodo_fim` TAMBÉM é capado na demissão
+
+A exceção do #75 ("projeção legal — pode passar da demissão") era FALSA: o
+PJE-Calc recusa o save dos parâmetros do aviso (ocorrência DESLIGAMENTO) com
+`A data final não pode ser maior que a data demissão` — 3 tentativas em
+0000448-36 e em 0001397-60 (07/10). Corpus: 29/33 avisos já vinham com
+`periodo_fim = demissão`; os 4 que vazaram foram recusados. A projeção vive em
+Dados do Cálculo (`projeta_aviso_indenizado` + `data_termino_calculo`), não no
+período da verba. Normalizer sem exceção + prompt (tabela de ocorrência ×
+período) corrigido. `test_inv45` atualizado.
+
+### 3. Apurar Cartão de Ponto: click NATIVO + espera pelo RESULTADO
+
+`montarApartirDaApuracao` é `a4j:commandButton` (cartaodeponto.xhtml:138). O
+onclick-exec foi INERTE — o access log do Tomcat não registrou NENHUM POST
+após o "✓ click Apurar" — e a apuração de 34 meses com overrides leva minutos:
+o networkidle de `_aguardar_ajax(120000)` voltava com o POST em voo e o
+Fechar+Reabrir seguinte colidia com o lock (`GET principal.jsf → 500
+LockTimeout`). Resultado: "não apurado" ×3, 35 meses sem Hs Trabalhadas, HE
+100% (IMPORTADA_DO_CARTAO) liquidaria R$ 0. Agora `_clicar_apurar_e_verificar`
+clica nativo, faz poll pela tabela `tabOcorrencias` até 10 min (re-click se a
+página ficar ociosa com o botão visível; reabre a Montar se trocar de página)
+e passa pelo gate #80-H antes de seguir.
+
+**Coluna da HE de DOMINGO/FERIADO**: com `extras_domingos_separado` o PJE-Calc
+apura os repousos em "Hs Ext Diárias em Repousos"; "Hs EXT" fica só com as
+extras dos dias úteis (zero numa programação de 8h). Colunas reais do cartão
+(TBCARTAODEPONTO): Hs Trabalhadas / Hs EXT / Hs Ext Diárias em Repousos /
+Repousos Trabalhados / Dias Trabalhados. Normalizer
+`_norm_cartao_coluna_repousos` declara `quantidade.tipo_cartao_ponto` na
+prévia para verbas com 100%/DOMINGO/FERIADO/REPOUSO/DSR no nome; o bot prefere
+a label declarada (`_norm_ascii`, sem acento) e só depois a heurística.
+
+### 4. FÉRIAS: ocorrência FORA do período estreitado ⇒ Regerar Sobrescrever antes do #80-CX
+
+O #80-CY estreitou o período (20/06/2025→01/04/2026) e o Regerar pós-parâmetros
+"passou" sem regerar (a modal pode não aparecer e a função retornava True em
+silêncio): a grade manteve o PA 2023/24 (21/05/2025), o #80-CX abortou "2
+elegíveis × 3 linhas" e a liquidação travou. No corpus (52 runs com #80-CX) o
+PJE-Calc filtra os PAs pela data ao regerar — este run foi o único com o erro.
+Fix: `_filtrar_ferias_por_periodo_aquisitivo` detecta linha com data fora de
+`[periodo_inicio, periodo_fim]`, faz `_regerar_ocorrencias_verbas(sobrescrever=True)`
+(só sem grade INFORMADO editada) e relê; persistindo, 🛑 explícito.
+`_regerar_com_modal_confirmacao` loga "modal não apareceu" e verifica o radio
+Sobrescrever.
+
+> **Prévia (decisão de modelagem, 08/10/2026):** a IA integrou o salário
+> por fora (R$ 200) na base do 13º/2026, das FÉRIAS 2025/26 e do AVISO
+> (MAIOR_REMUNERAÇÃO 1.906,87) E manteve os reflexos "sobre DIFERENÇA
+> SALARIAL" — a mesma parcela entrava duas vezes nas rescisórias de 2026
+> (~R$ 530). Rescisórias ficam na base SALÁRIO BASE; os reflexos da
+> DIFERENÇA carregam o R$ 200 em todos os anos (é o que a Etapa 1 da própria
+> IA descrevia: "proporcional 2026 + reflexos do extrafolha nos anos
+> anteriores"). A DIFERENÇA fica `proporcionaliza=NAO` (a ocorrência de
+> 04/2026, com 1 dia, tem de valer R$ 200 inteiros para o reflexo de AVISO
+> com Comportamento VALOR MENSAL).
+
+> ⚠️ O H2 do cálculo 106 foi EDITADO à mão depois do run (demissão/término
+> 19/06/2026 às 20:07–20:20 BRT) — ao auditar, use o log + access log, não o
+> estado atual do banco.
+
+---
+
 ## Regra obrigatória — Click no sidebar espera o NOVO documento (#80-DX)
 
 > **`_navegar_menu_via_click` só devolve o controle depois que o documento

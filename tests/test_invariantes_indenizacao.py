@@ -1606,8 +1606,13 @@ def test_inv45_cap_periodo_fim_na_demissao():
     periodo_fim POSTERIOR à demissão') e a AUTOMAÇÃO NÃO INICIAVA.
 
     Fix: normalizer capa periodo_fim em data_demissao para ocorrências
-    NÃO-MENSAIS (DESLIGAMENTO/DEZEMBRO/PERIODO_AQUISITIVO), preservando AVISO
-    PRÉVIO (projeção legal Lei 12.506/2011).
+    NÃO-MENSAIS (DESLIGAMENTO/DEZEMBRO/PERIODO_AQUISITIVO).
+
+    #80-EG (0000448-36 / 0001397-60, 07–08/10/2026): a exceção do AVISO PRÉVIO
+    ("projeção legal") era FALSA — o PJE-Calc recusa o save com periodo_fim >
+    demissão ('A data final não pode ser maior que a data demissão...') e a
+    verba fica com os defaults do Expresso. O aviso também é capado; a
+    projeção vive em Dados do Cálculo (projeta_aviso_indenizado + término).
     """
     from modules.json_normalizer import normalize_v2_json
     base = {
@@ -1631,8 +1636,8 @@ def test_inv45_cap_periodo_fim_na_demissao():
     vs = {v["nome_pjecalc"]: v["parametros"] for v in out["verbas_principais"]}
     # 13º capado na demissão
     assert vs["13º SALÁRIO"]["periodo_fim"] == "05/11/2025"
-    # aviso prévio preservado (projeção legal)
-    assert vs["AVISO PRÉVIO"]["periodo_fim"] == "05/12/2025"
+    # #80-EG: aviso prévio TAMBÉM capado (o PJE-Calc recusa periodo_fim > demissão)
+    assert vs["AVISO PRÉVIO"]["periodo_fim"] == "05/11/2025"
     # a função existe e está encadeada no normalize
     src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
     assert "_norm_cap_periodo_fim_na_demissao(data)" in src
@@ -5933,3 +5938,94 @@ def test_inv171_quantidade_mensal_dos_reflexos_na_grade_da_principal():
     assert "self._aplicar_quantidades_mensais_reflexos(v)" in pos
     ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "#80-EF" in ext and '"quantidade": 8.18' in ext
+
+
+def test_inv172_13_salario_sem_ordinal_resolve_para_expresso():
+    """#80-EG (0000448-36, 08/10/2026): a IA emitiu `expresso_alvo="13 SALARIO"`
+    (sem º) e o #80-AR, sem resolver o canônico, rebaixou o 13º para MANUAL —
+    cujo form morreu 3× (LockTimeout) e o cálculo liquidou SEM o 13º. O
+    resolvedor canônico tolera o indicador ordinal e o extenso."""
+    from modules.expresso_verbas_canonicas import resolver_verba_expresso
+    for q in ("13 SALARIO", "13 SALÁRIO", "13o SALARIO", "DECIMO TERCEIRO SALARIO",
+              "13º SALARIO", "13º SALÁRIO"):
+        assert resolver_verba_expresso(q) == "13º SALÁRIO", q
+    from modules.json_normalizer import normalize_v2_json
+    out = normalize_v2_json({
+        "parametros_calculo": {"data_admissao": "20/06/2023", "data_demissao": "01/04/2026"},
+        "verbas_principais": [{
+            "id": "v06", "estrategia_preenchimento": "expresso_direto",
+            "expresso_alvo": "13 SALARIO", "nome_pjecalc": "13 SALARIO",
+            "parametros": {"caracteristica": "DECIMO_TERCEIRO_SALARIO",
+                           "ocorrencia_pagamento": "DESLIGAMENTO",
+                           "periodo_inicio": "01/01/2026", "periodo_fim": "06/05/2026"},
+        }],
+    })
+    v = out["verbas_principais"][0]
+    assert v["estrategia_preenchimento"] == "expresso_direto"
+    assert v["expresso_alvo"] == "13º SALÁRIO"
+    # #72 + #75: apuração nativa com janela deferida e período capado na demissão
+    assert v["parametros"]["janela_ocorrencias_inicio"] == "01/01/2026"
+    assert v["parametros"]["periodo_fim"] == "01/04/2026"
+
+
+def test_inv173_he_de_domingo_importa_coluna_de_repousos():
+    """#80-EG: HE 100% de domingo importada do cartão com descanso separado usa
+    a coluna "Hs Ext Diárias em Repousos" (declarada na prévia), não "Hs EXT"
+    (que fica zerada numa programação de 8h). Bot prefere a label declarada."""
+    from modules.json_normalizer import normalize_v2_json
+    base = {
+        "parametros_calculo": {"data_admissao": "20/06/2023", "data_demissao": "01/04/2026"},
+        "cartao_de_ponto": {"extras_domingos_separado": True,
+                            "descanso": {"apurar_domingos_trabalhados": True}},
+        "verbas_principais": [
+            {"id": "v03", "estrategia_preenchimento": "expresso_direto",
+             "expresso_alvo": "HORAS EXTRAS 100%", "nome_pjecalc": "HORAS EXTRAS 100%",
+             "parametros": {"ocorrencia_pagamento": "MENSAL",
+                            "periodo_inicio": "20/06/2023", "periodo_fim": "01/04/2026",
+                            "formula_calculado": {"quantidade": {"tipo": "IMPORTADA_DO_CARTAO"}}}},
+            {"id": "v02", "estrategia_preenchimento": "expresso_direto",
+             "expresso_alvo": "HORAS EXTRAS 50%", "nome_pjecalc": "HORAS EXTRAS 50%",
+             "parametros": {"ocorrencia_pagamento": "MENSAL",
+                            "periodo_inicio": "20/06/2023", "periodo_fim": "01/04/2026",
+                            "formula_calculado": {"quantidade": {"tipo": "IMPORTADA_DO_CARTAO"}}}},
+        ],
+    }
+    out = normalize_v2_json(base)
+    q = {v["id"]: v["parametros"]["formula_calculado"]["quantidade"] for v in out["verbas_principais"]}
+    assert q["v03"]["tipo_cartao_ponto"] == "Hs Ext Diárias em Repousos"
+    assert not q["v02"].get("tipo_cartao_ponto"), "HE 50% (dias úteis) continua em Hs EXT"
+    # sem descanso separado, nada muda
+    base2 = {**base, "cartao_de_ponto": {"extras_domingos_separado": False, "descanso": {}}}
+    out2 = normalize_v2_json(base2)
+    assert not out2["verbas_principais"][0]["parametros"]["formula_calculado"]["quantidade"].get("tipo_cartao_ponto")
+    pw = PLAYWRIGHT_V2
+    vq = pw.split("def _vincular_cartao_ponto_quantidade")[1].split("\n    def ")[0]
+    assert 'preferir = "em Repousos"' in vq
+    assert "preferir_label=val" in vq, "label declarada na prévia deve ter prioridade"
+    assert "def _norm_ascii" in pw
+
+
+def test_inv174_apuracao_do_cartao_click_nativo_e_espera_pelo_resultado():
+    """#80-EG: o Apurar do cartão é a4j:commandButton — onclick-exec era inerte
+    (nenhum POST no access log) e o networkidle voltava com o POST em voo; o
+    bot navegava e matava a conversa (500 LockTimeout). Agora: click NATIVO +
+    poll pela tabela `tabOcorrencias` (até 10 min) + re-click se ocioso +
+    gate #80-H. E o #80-CX regera (Sobrescrever) quando a grade das férias tem
+    ocorrência fora do período estreitado, antes de abortar por contagem."""
+    pw = PLAYWRIGHT_V2
+    ap = pw.split("def _clicar_apurar_e_verificar")[1].split("\n    def ")[0]
+    assert "loc.click(force=True, timeout=8000)  # NATIVE" in ap
+    assert "table[id$=':tabOcorrencias']" in ap and "_LIMITE_S = 600.0" in ap
+    assert "re-click" in ap and '_aguardar_servidor_ocioso("pós-apuração do cartão (#80-EG)")' in ap
+    assert "self._aguardar_ajax(120000)" not in ap, "espera cega de 120s removida"
+    cx = pw.split("def _filtrar_ferias_por_periodo_aquisitivo")[1].split("\n    def ")[0]
+    assert "_fora_do_periodo(linhas)" in cx
+    assert "self._regerar_ocorrencias_verbas(sobrescrever=True)" in cx
+    assert 'getattr(self, "_ocorrencias_editadas", False)' in cx, "Sobrescrever é global: nunca após grade INFORMADO editada"
+    rg = pw.split("def _regerar_com_modal_confirmacao")[1].split("\n    def ")[0]
+    assert "o Regerar pode NÃO ter rodado" in rg, "modal ausente nunca silencioso"
+    assert "não marcado — Regerar sairá como MANTER" in rg
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "EXCEÇÃO: pode estender até 90 dias" not in ext
+    assert "`periodo_fim = data_demissao` — NUNCA a data projetada" in ext
+

@@ -245,3 +245,13 @@ def test_parcelas_semestrais_informado_e_ocorrencia_unica():
     ocorrência única → período = o mês."""
     assert "PARCELAS SEMESTRAIS/ANUAIS" in PROMPT and "#80-EE" in PROMPT
     assert "ocorrência única" in PROMPT.lower() or "OCORRÊNCIA ÚNICA" in PROMPT
+
+
+def test_aviso_previo_periodo_fim_na_demissao():
+    """#80-EG (0000448-36): o período do AVISO PRÉVIO termina na demissão — o
+    PJE-Calc recusa periodo_fim > demissão em ocorrência DESLIGAMENTO. A
+    projeção fica em Dados do Cálculo (projeta_aviso_indenizado + término)."""
+    assert "EXCEÇÃO: pode estender até 90 dias" not in PROMPT
+    assert "NUNCA a data projetada" in PROMPT
+    assert "projeta_aviso_indenizado=true" in PROMPT
+

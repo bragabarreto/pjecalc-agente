@@ -1499,8 +1499,16 @@ def _norm_cap_periodo_fim_na_demissao(data: dict[str, Any]) -> None:
     demissão, para 'Ocorrências de Pagamento' diferentes de Mensal"). O schema
     flagueia isso como completude=INCOMPLETO e a automação NÃO INICIA.
 
-    EXCEÇÃO: AVISO PRÉVIO (projeção legal Lei 12.506/2011 — periodo_fim pode/deve
-    passar da demissão). Mantido intocado.
+    ⚠ #80-EG (0000448-36 e 0001397-60, 07–08/10/2026): a antiga EXCEÇÃO para o
+    AVISO PRÉVIO ("projeção legal — periodo_fim pode passar da demissão") era
+    FALSA. O PJE-Calc recusa o save dos parâmetros do AVISO PRÉVIO (ocorrência
+    DESLIGAMENTO) com periodo_fim > demissão — 'A data final não pode ser maior
+    que a data demissão, para o caso de "Ocorrências de Pagamento" diferentes
+    de Mensal' — em 3 tentativas, e a verba fica com os defaults do Expresso
+    (sem divisor 30, sem base). A projeção do aviso vive em Dados do Cálculo
+    (`projeta_aviso_indenizado` + `data_termino_calculo`), não no período da
+    verba. Corpus: 29/33 avisos já vinham com periodo_fim = demissão; os 4 que
+    vazaram foram recusados. Sem exceção: capa TODA ocorrência não-Mensal.
 
     Bug (processo 0000953-… demissão 05/11/2025, 19/06/2026): o 13º (verba única
     multi-ano) ficava com `periodo_fim = data_termino_calculo` (07/12/2025 =
@@ -1529,13 +1537,9 @@ def _norm_cap_periodo_fim_na_demissao(data: dict[str, Any]) -> None:
             continue
         if str(p.get("ocorrencia_pagamento") or "") not in _NAO_MENSAL:
             continue
-        # AVISO PRÉVIO: projeção legal — não capar
-        _carac = str(p.get("caracteristica") or "").upper()
-        _alvo = (v.get("expresso_alvo") or "").upper()
-        _nome = (v.get("nome_pjecalc") or "").upper()
-        if "AVISO_PREVIO" in _carac or "AVISO PRÉVIO" in _alvo or "AVISO PREVIO" in _alvo \
-           or "AVISO PRÉVIO" in _nome or "AVISO PREVIO" in _nome:
-            continue
+        # #80-EG: AVISO PRÉVIO NÃO é exceção — o PJE-Calc recusa o save com
+        # periodo_fim > demissão (ver docstring). A projeção fica em Dados do
+        # Cálculo.
         pf = p.get("periodo_fim")
         if not pf:
             continue
@@ -2894,6 +2898,64 @@ def _norm_integridade_historicos(data: dict[str, Any]) -> None:
                 )
 
 
+def _norm_cartao_coluna_repousos(data: dict[str, Any]) -> None:
+    """#80-EG (0000448-36, 08/10/2026) — HE de DOMINGO/FERIADO importada do
+    cartão usa a coluna "Hs Ext Diárias em Repousos", não "Hs EXT".
+
+    Com `extras_domingos_separado` (descanso separado) o PJE-Calc apura as
+    horas dos repousos em coluna PRÓPRIA — "Hs Ext Diárias em Repousos" —
+    e "Hs EXT" fica só com as extras dos dias úteis (zero numa programação
+    de 8h). A heurística do bot mandava toda "HORAS EXTRAS" para "Hs EXT":
+    a HE 100% (1 domingo/mês, 5h) liquidaria R$ 0. Fidelidade prévia↔bot:
+    a coluna é declarada em `quantidade.tipo_cartao_ponto` ANTES da prévia.
+    Só age quando a verba não declara coluna e o nome sinaliza repouso
+    (100% / DOMINGO / FERIADO / REPOUSO / DSR).
+    """
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    cps = []
+    cp = data.get("cartao_de_ponto")
+    if isinstance(cp, dict):
+        cps.append(cp)
+    for c in data.get("cartoes_de_ponto") or []:
+        if isinstance(c, dict):
+            cps.append(c)
+    separado = any(
+        bool(c.get("extras_domingos_separado"))
+        or bool(c.get("extras_sabados_domingos_separado"))
+        or bool((c.get("descanso") or {}).get("apurar_domingos_trabalhados"))
+        or bool((c.get("descanso") or {}).get("apurar_sabados_domingos"))
+        for c in cps
+    )
+    if not separado:
+        return
+    import logging
+    import re as _re
+    _log = logging.getLogger(__name__)
+    _SINAL = _re.compile(r"100\s*%|DOMINGO|FERIADO|REPOUSO|\bDSR\b", _re.I)
+    for v in verbas:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros") or {}
+        fc = p.get("formula_calculado") if isinstance(p, dict) else None
+        q = fc.get("quantidade") if isinstance(fc, dict) else None
+        if not isinstance(q, dict) or q.get("tipo") != "IMPORTADA_DO_CARTAO":
+            continue
+        if q.get("tipo_cartao_ponto"):
+            continue
+        nome = f"{v.get('nome_pjecalc') or ''} {v.get('expresso_alvo') or ''} {v.get('nome_sentenca') or ''}"
+        if not _SINAL.search(nome):
+            continue
+        q["tipo_cartao_ponto"] = "Hs Ext Diárias em Repousos"
+        _log.warning(
+            "Normalizer #80-EG: verba '%s' importa quantidade do cartão e é de "
+            "repouso (domingo/feriado) — coluna 'Hs Ext Diárias em Repousos' "
+            "(não 'Hs EXT', que fica zerada com descanso separado)",
+            v.get("nome_pjecalc"),
+        )
+
+
 def _norm_turnos_meia_noite(data: dict[str, Any]) -> None:
     """#80-BZ (0000042-58, 27/07/2026; regra do usuário) — NÃO REVERTER.
 
@@ -3200,6 +3262,10 @@ def normalize_v2_json(
     # trava o save ("Campo obrigatório: Cartão de Ponto"). Coage p/ OUTRO_VALOR
     # usando a carga horária mensal do cartão (ou 220).
     _norm_divisor_cartao_para_carga_horaria(data)
+
+    # Salvaguarda #80-EG: HE de domingo/feriado importada do cartão com
+    # descanso separado → coluna "Hs Ext Diárias em Repousos" declarada na prévia.
+    _norm_cartao_coluna_repousos(data)
 
     # Salvaguarda #80-BZ (0000042-58, 27/07/2026): jornada NOTURNA quebrada na
     # meia-noite — a IA emite (X→00:00)+(00:00→Y); o PJE-Calc REJEITA o save

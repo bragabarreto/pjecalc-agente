@@ -3698,6 +3698,48 @@ class PlaywrightAutomatorV2:
         if not linhas:
             self.log(f"    🛑 #80-CX grade vazia em '{nome}'")
             return
+        # #80-EG (0000448-36, 08/10/2026): ocorrência FORA do período da verba
+        # na grade = o Regerar pós-parâmetros (que estreitou o período, #80-CY)
+        # não rodou ou foi inerte — o PJE-Calc só filtra os PAs pela data ao
+        # (re)gerar. Sem regerar, a liquidação trava ("Todas as ocorrências da
+        # verba FÉRIAS + 1/3 devem estar contidas no período") e o #80-CX
+        # aborta por contagem (2 elegíveis × 3 linhas). Regerar SOBRESCREVER
+        # (global — só quando nenhuma grade INFORMADO foi editada) e reler,
+        # antes de decidir. Nunca silencioso.
+        def _fora_do_periodo(ls):
+            out = []
+            for r in ls:
+                d = _p(r.get("dataInicial"))
+                if d and (d < pi_d or d > pf_d):
+                    out.append(r)
+            return out
+        _fora_per = _fora_do_periodo(linhas)
+        if _fora_per and not getattr(self, "_ocorrencias_editadas", False):
+            self.log(f"    ⟳ #80-EG {len(_fora_per)} ocorrência(s) FORA do período {pi}→{pf} na grade "
+                     f"de '{nome}' ({[r.get('dataInicial') for r in _fora_per]}) — Regerar Sobrescrever + releitura")
+            try:
+                self._aguardar_servidor_ocioso(f"#80-EG pré-regerar '{nome}'")
+            except Exception:
+                pass
+            self._regerar_ocorrencias_verbas(sobrescrever=True)
+            try:
+                self._aguardar_servidor_ocioso(f"#80-EG pós-regerar '{nome}'")
+            except Exception:
+                pass
+            if not self._abrir_ocorrencias_da_verba(v):
+                self.log(f"    🛑 #80-EG não reabriu as ocorrências de '{nome}' após o Regerar")
+                return
+            linhas = sorted(self._ler_ocorrencias_da_grade(), key=lambda r: r["idx"])
+            _fora_per = _fora_do_periodo(linhas)
+            if _fora_per:
+                self.log(f"    🛑 #80-EG ocorrências fora do período PERSISTEM após Regerar Sobrescrever "
+                         f"({[r.get('dataInicial') for r in _fora_per]}) — a liquidação vai travar; "
+                         f"conferir o período da verba '{nome}' no PJE-Calc")
+            else:
+                self.log(f"    ✓ #80-EG grade de '{nome}' regerada dentro do período ({len(linhas)} linha(s))")
+        elif _fora_per:
+            self.log(f"    ⚠ #80-EG {len(_fora_per)} ocorrência(s) fora do período em '{nome}', mas há grade "
+                     f"INFORMADO editada — Regerar Sobrescrever NÃO é seguro; a liquidação pode travar")
         # #80-DF: linha k = k-ésimo PA elegível. Se as contagens não batem, o
         # modelo não descreve esta grade — abortar em vez de adivinhar (zerar a
         # linha errada é SUBCÁLCULO, o erro que este filtro existe p/ evitar).
@@ -4897,7 +4939,7 @@ class PlaywrightAutomatorV2:
         # 1. Pré-selecionar radio Sobrescrever se necessário
         if sobrescrever:
             try:
-                self._page.evaluate(
+                _radio_ok = self._page.evaluate(
                     """() => {
                         const r = document.querySelector("input[id='formulario:tipoRegeracao:1']");
                         if (!r) return false;
@@ -4907,9 +4949,11 @@ class PlaywrightAutomatorV2:
                         // Também atualizar manterAlteracoes hidden (true=manter, false=sobrescrever)
                         const h = document.querySelector("input[id='formulario:manterAlteracoes']");
                         if (h) h.value = 'false';
-                        return true;
+                        return r.checked === true;
                     }"""
                 )
+                if not _radio_ok:
+                    self.log(f"{log_prefix}⚠ radio 'Sobrescrever' (tipoRegeracao:1) não marcado — Regerar sairá como MANTER")
             except Exception:
                 pass
 
@@ -4948,6 +4992,11 @@ class PlaywrightAutomatorV2:
         except Exception:
             # Modal pode não aparecer se: (a) lista vazia, (b) já confirmado.
             # Aguardar AJAX caso tenha sido confirmação inline.
+            # #80-EG: NUNCA silencioso — no 0000448-36 o Regerar Sobrescrever
+            # pós-parâmetros das FÉRIAS "passou" sem regerar e a ocorrência do
+            # PA fora do período estreitado travou a liquidação.
+            self.log(f"{log_prefix}ℹ modal Confirmação do Regerar não apareceu em "
+                     f"{timeout_modal_ms // 1000}s — o Regerar pode NÃO ter rodado")
             self._aguardar_ajax(timeout_ajax_ms)
             return True
 
@@ -5871,6 +5920,7 @@ class PlaywrightAutomatorV2:
             self.log(f"    ⚠ Dropdown cartão de ponto (Quantidade) não apareceu — IMPORTADA_DO_CARTAO sem vínculo")
             return
         # Heurística — qual coluna corresponde à verba
+        import re as _re_eg
         preferir = None
         if nome_verba:
             n = nome_verba.upper()
@@ -5880,6 +5930,12 @@ class PlaywrightAutomatorV2:
                 # #80-DK: INTERVALO INTERJORNADAS tem coluna própria
                 # ("Hs Interjornadas"); antes caía em "Intrajornada".
                 preferir = "Interjornada"
+            elif _re_eg.search(r"100\s*%|DOMINGO|FERIADO|REPOUSO|\bDSR\b", n):
+                # #80-EG (0000448-36): HE de DOMINGO/FERIADO com descanso
+                # separado tem coluna própria "Hs Ext Diárias em Repousos";
+                # "Hs EXT" fica só com as extras dos dias úteis (zero numa
+                # programação de 8h) → HE 100% liquidava R$ 0.
+                preferir = "em Repousos"
             elif "HORAS EXTRAS" in n or " HE " in f" {n} " or n.startswith("HE "):
                 preferir = "Hs EXT"
             elif "INTERVALO" in n:
@@ -5893,7 +5949,14 @@ class PlaywrightAutomatorV2:
                     sel.select_option(value=val)
                     self.log(f"    ✓ cartão de ponto (Quantidade) = {val}")
                 except Exception:
-                    sel_label = self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
+                    # #80-EG: a prévia declara a COLUNA pela LABEL (o value do
+                    # <s:selectItems> é id de entidade). Preferir a declarada;
+                    # heurística só se ela não existir no dropdown.
+                    sel_label = self._selecionar_primeira_opcao_cartao(sel, preferir_label=val)
+                    if not sel_label or self._norm_ascii(val) not in self._norm_ascii(sel_label):
+                        self.log(f"    ⚠ coluna declarada na prévia '{val}' não existe no dropdown — "
+                                 f"usando heurística '{preferir}'")
+                        sel_label = self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
             else:
                 sel_label = self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
         except Exception as e:
@@ -6065,6 +6128,15 @@ class PlaywrightAutomatorV2:
             self.log("    ⟳ #80-DK coluna do Divisor ainda não confirmada — re-selecionando + retry")
         self.log(f"    🛑 #80-DK coluna '{preferir}' NÃO confirmada no Divisor após 3 tentativas — divisor pode sair zero")
 
+    @staticmethod
+    def _norm_ascii(t: str | None) -> str:
+        """minúsculas, sem acentos, espaços colapsados — p/ casar labels do PJE-Calc (#80-EG)."""
+        import unicodedata as _ud
+        import re as _re
+        t = _ud.normalize("NFD", t or "")
+        t = "".join(c for c in t if _ud.category(c) != "Mn")
+        return _re.sub(r"\s+", " ", t).strip().lower()
+
     def _selecionar_primeira_opcao_cartao(self, sel_locator, preferir_label: str | None = None) -> str | None:
         """Seleciona option do dropdown de coluna do cartão de ponto.
 
@@ -6088,9 +6160,9 @@ class PlaywrightAutomatorV2:
             label_alvo = None
             # Tentativa 1: match preferir_label (case-insensitive contains)
             if preferir_label:
-                pl = preferir_label.lower()
+                pl = self._norm_ascii(preferir_label)
                 for o in options:
-                    if o['text'].lower().find(pl) >= 0 and o['value'] and not o['value'].startswith('org.jboss'):
+                    if self._norm_ascii(o['text']).find(pl) >= 0 and o['value'] and not o['value'].startswith('org.jboss'):
                         valor_alvo = o['value']
                         label_alvo = o['text']
                         break
@@ -12150,38 +12222,128 @@ class PlaywrightAutomatorV2:
         """Clica "Apurar Cartão de Ponto" na Montar e CONFIRMA na tabela
         (#80-DN); com `cartoes`, exige Hs Trabalhadas > 0 nos meses de TODOS
         (#80-DQ)."""
-        # Clicar Apurar Cartão de Ponto
-        clicou_apurar = self._page.evaluate(
-            """() => {
-                // Estratégia 1: id `formulario:montarApartirDaApuracao`
-                let btn = document.getElementById('formulario:montarApartirDaApuracao') ||
-                          document.querySelector('[id$=":montarApartirDaApuracao"]');
-                // Estratégia 2: value contém "Apurar Cart"
-                if (!btn) {
-                    const norm = s => (s||'').replace(/\\s+/g,' ').trim().toLowerCase();
-                    btn = [...document.querySelectorAll('input,button')].find(b =>
-                        norm(b.value || b.textContent || '').indexOf('apurar cart') >= 0
-                    );
-                }
-                if (!btn) return null;
-                const onclickStr = btn.getAttribute('onclick') || '';
-                if (onclickStr) {
-                    try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return 'onclick:' + btn.id.slice(0,50); } catch(_) {}
-                }
-                btn.click(); return 'click:' + btn.id.slice(0,50);
-            }"""
-        )
+        # Clicar Apurar Cartão de Ponto — click NATIVO + espera pelo RESULTADO.
+        #
+        # #80-EG (0000448-36, 08/10/2026): `montarApartirDaApuracao` é
+        # a4j:commandButton (cartaodeponto.xhtml:138). O onclick-exec
+        # (`new Function(onclick)`) NÃO dispara o A4J de forma confiável
+        # (Invariante 3): o access log do Tomcat não registrou NENHUM POST
+        # após o "✓ click Apurar" da 1ª tentativa e a Montar seguia sem
+        # ocorrências → "não apurado" ×3, HE 100% (IMPORTADA_DO_CARTAO)
+        # liquidaria R$ 0. E a apuração de 34 meses com overrides leva
+        # MINUTOS: o networkidle de `_aguardar_ajax(120000)` voltava no
+        # timeout com o POST em voo e a navegação seguinte (Fechar+Reabrir)
+        # colidia com o lock (GET principal.jsf → 500 LockTimeout), matando a
+        # conversa. Agora: click nativo (Playwright) + poll pelo RESULTADO
+        # (tabela `tabOcorrencias` renderizada) até 10 min, re-click se a
+        # página ficar ociosa com o botão ainda visível, e gate #80-H antes
+        # de seguir. #80-R (cartão pesado) continua coberto pelo limite longo.
+        BTN_APURAR = "[id$=':montarApartirDaApuracao'], [id='formulario:montarApartirDaApuracao']"
+
+        def _estado_montar() -> dict:
+            try:
+                return self._page.evaluate(
+                    """(q) => {
+                        const b = document.querySelector(q);
+                        const btn = !!(b && b.offsetParent !== null);
+                        const tab = !!document.querySelector("table[id$=':tabOcorrencias']");
+                        const txt = document.body ? (document.body.innerText || '') : '';
+                        const erro = /Erro Interno no Servidor/i.test(txt);
+                        const m = document.querySelector("[id$=':msgAguardeContainer'], [id$=':msgAguarde']");
+                        const aguarde = !!(m && m.offsetParent !== null);
+                        return {btn, tab, erro, aguarde, url: location.href.slice(-70)};
+                    }""",
+                    BTN_APURAR,
+                ) or {}
+            except Exception:
+                return {"btn": False, "tab": False, "erro": False, "aguarde": False, "url": "?"}
+
+        def _clicar_apurar():
+            try:
+                loc = self._page.locator(BTN_APURAR).first
+                if loc.count() == 0:
+                    return None
+                try:
+                    loc.scroll_into_view_if_needed(timeout=3000)
+                except Exception:
+                    pass
+                loc.click(force=True, timeout=8000)  # NATIVE — dispara o A4J de verdade
+                return "native"
+            except Exception as e:
+                self.log(f"    ⚠ click nativo Apurar falhou: {str(e)[:90]} — fallback onclick-exec")
+            return self._page.evaluate(
+                """() => {
+                    // Estratégia 1: id `formulario:montarApartirDaApuracao`
+                    let btn = document.getElementById('formulario:montarApartirDaApuracao') ||
+                              document.querySelector('[id$=":montarApartirDaApuracao"]');
+                    // Estratégia 2: value contém "Apurar Cart"
+                    if (!btn) {
+                        const norm = s => (s||'').replace(/\\s+/g,' ').trim().toLowerCase();
+                        btn = [...document.querySelectorAll('input,button')].find(b =>
+                            norm(b.value || b.textContent || '').indexOf('apurar cart') >= 0
+                        );
+                    }
+                    if (!btn) return null;
+                    const onclickStr = btn.getAttribute('onclick') || '';
+                    if (onclickStr) {
+                        try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return 'onclick:' + btn.id.slice(0,50); } catch(_) {}
+                    }
+                    btn.click(); return 'click:' + btn.id.slice(0,50);
+                }"""
+            )
+
+        clicou_apurar = _clicar_apurar()
         if not clicou_apurar:
             return "botão 'Apurar Cartão de Ponto' não encontrado"
         self.log(f"    ✓ click Apurar Cartão de Ponto ({clicou_apurar})")
-        # #80-R (MARIA THAYSNARA 0000632-89, 27/06/2026): apuração Drools com
-        # cartão pesado (130+ overrides × 61 meses 12x36) pode levar >60s na
-        # VM pequena. 15s era insuficiente → bot avançava com servidor ainda
-        # computando → @Synchronized LockTimeout em toda a fase de verbas.
-        self._aguardar_ajax(120000)
-        sucesso = self._aguardar_operacao_sucesso(timeout_ms=30000, bloqueante=False)
+        import time as _teg
+        _t0 = _teg.monotonic()
+        _LIMITE_S = 600.0
+        _recliques = 0
+        _ociosos = 0
+        _sem_pagina = 0
+        while True:
+            _ini = _teg.monotonic()
+            self._aguardar_ajax(15000)  # bloqueia enquanto o POST está em voo (até 15 s por rodada)
+            _idle = (_teg.monotonic() - _ini) < 1.2
+            st = _estado_montar()
+            if st.get("tab"):
+                self.log(f"    ✓ #80-EG tabela de ocorrências do cartão renderizada após {int(_teg.monotonic() - _t0)}s")
+                break
+            if st.get("erro"):
+                return "página 'Erro Interno no Servidor' após o Apurar (LockTimeout — servidor ocupado)"
+            if _teg.monotonic() - _t0 > _LIMITE_S:
+                return (f"apuração sem resultado em {int(_LIMITE_S)}s (botão Apurar visível={st.get('btn')}, "
+                        f"url=...{st.get('url')})")
+            if st.get("btn") and _idle and not st.get("aguarde"):
+                # botão ainda visível, rede ociosa, sem 'Aguarde' = click inerte
+                _ociosos += 1
+                if _ociosos >= 3 and _recliques < 2:
+                    _recliques += 1
+                    self.log(f"    ⟳ #80-EG Apurar sem resposta (página ociosa, botão ainda visível) — re-click {_recliques}/2")
+                    _clicar_apurar()
+                    _ociosos = 0
+            elif not st.get("btn") and _idle and not st.get("aguarde"):
+                # nem botão nem tabela: a resposta pode ter trocado de página —
+                # reabrir a Montar (sem URL direta) e conferir lá
+                _sem_pagina += 1
+                if _sem_pagina >= 3:
+                    self.log("    ℹ #80-EG Montar sem botão nem tabela após o Apurar — reabrindo a Montar para conferir")
+                    _sem_pagina = 0
+                    motivo = self._abrir_pagina_montar_cartao()
+                    if motivo:
+                        return f"após o Apurar: {motivo}"
+            else:
+                _ociosos = 0
+                _sem_pagina = 0
+            self._page.wait_for_timeout(3000)
+        try:
+            self._aguardar_servidor_ocioso("pós-apuração do cartão (#80-EG)")
+        except Exception:
+            pass
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=5000, bloqueante=False)
         if not sucesso:
-            self.log("  ⚠ Apuração disparada mas sem mensagem de sucesso explícita — conferindo a tabela")
+            self.log("  ℹ Apuração sem mensagem de sucesso explícita — conferindo a tabela")
         # (c) #80-DN — GROUND TRUTH: a tabela de ocorrências renderizada pelo bean.
         tabela = self._ler_ocorrencias_cartao_apuradas()
         _alvos = list(cartoes) if cartoes else ([cp] if cp is not None else [])

@@ -106,6 +106,14 @@ def _normalizar_estrita(nome: str) -> str:
     s = _normalizar(nome)
     # Remove acentos
     s = "".join(c for c in unicodedata.normalize("NFD", s) if unicodedata.category(c) != "Mn")
+    # #80-EG (0000448-36, 08/10/2026): indicador ordinal e extenso do 13º.
+    # A IA emitiu `expresso_alvo="13 SALARIO"` (sem º) e o #80-AR, sem
+    # resolver, rebaixou o 13º p/ MANUAL — cujo form morreu 3× (LockTimeout) e
+    # o cálculo liquidou SEM o 13º. "13 SALARIO" / "13o SALARIO" / "DECIMO
+    # TERCEIRO SALARIO" ≡ "13º SALÁRIO".
+    s = re.sub(r"(?<=\d)[ºª°]", "", s)
+    s = re.sub(r"(?<=\d)O(?=\s*SALARIO)", "", s)
+    s = re.sub(r"\bDECIMO\s*TERCEIRO\b", "13", s)
     # Abreviações comuns
     s = re.sub(r"\bARTIGO\b", "ART", s)
     s = re.sub(r"\bPARAGRAFO\b", "PAR", s)
