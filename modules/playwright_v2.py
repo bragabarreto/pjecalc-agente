@@ -49,6 +49,21 @@ def _fmt_br(valor: float | int) -> str:
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _fmt_br_prec(valor: float | int, casas: int = 8) -> str:
+    """#80-EH: multiplicador/divisor com até `casas` decimais (sem zeros à
+    direita, mínimo 2) — o PJE-Calc aceita 8 (mascara_precisao_decimal(this,19,8));
+    '1,33' em vez de 1,3333 nas FÉRIAS + 1/3 perdia 0,25 % do valor."""
+    try:
+        v = float(valor)
+    except Exception:
+        return _fmt_br(valor)
+    txt = f"{v:.{casas}f}".rstrip("0")
+    inteiro, _, dec = txt.partition(".")
+    dec = (dec + "00")[:max(2, len(dec))]
+    inteiro = f"{int(inteiro):,}".replace(",", ".")
+    return f"{inteiro},{dec}"
+
+
 def _split_cnj(numero_processo: str) -> dict:
     """Decompõe número CNJ em campos do form: NNNNNNN-DD.AAAA.J.RR.VVVV."""
     parts = numero_processo.replace("-", ".").split(".")
@@ -7028,7 +7043,7 @@ class PlaywrightAutomatorV2:
                 if f.divisor.tipo.value == "OUTRO_VALOR" and f.divisor.valor is not None:
                     self._setar_text_se_diferente("outroValorDoDivisor", _fmt_br(f.divisor.valor))
                 if f.multiplicador is not None:
-                    self._setar_text_se_diferente("outroValorDoMultiplicador", _fmt_br(f.multiplicador))
+                    self._setar_text_se_diferente("outroValorDoMultiplicador", _fmt_br_prec(f.multiplicador))
 
         # Valor Pago — sub-inputs text
         # ⚠ CRÍTICO (21/05/2026): preencher valor_pago tanto em valor=CALCULADO
@@ -13525,6 +13540,7 @@ class PlaywrightAutomatorV2:
                         incidenciaDoFgts: sel('incidenciaDoFgts'),
                         multaDoArtigo467: cb('multaDoArtigo467'),
                         multa10: cb('multa10'),
+                        excluirAvisoDaMulta: cb('excluirAvisoDaMulta'),
                     };
                 }"""
             ) or {}
@@ -13554,6 +13570,7 @@ class PlaywrightAutomatorV2:
             if str(_v(f.multa.tipo_valor) or "").upper() == "CALCULADA":
                 esp["multaDoFgts"] = _v(f.multa.percentual)
                 esp["incidenciaDoFgts"] = _v(f.incidencia)
+            esp["excluirAvisoDaMulta"] = bool(getattr(f.multa, "excluir_aviso_da_multa", False))
         return {k: v for k, v in esp.items() if v is not None}
 
     @staticmethod
@@ -13641,6 +13658,15 @@ class PlaywrightAutomatorV2:
                 # marcada (disabled="#{... or not registro.multa}") — fora disso o
                 # select_option esperaria actionability à toa.
                 _safe(lambda: self._selecionar("incidenciaDoFgts", f.incidencia), "incidenciaDoFgts")
+                # #80-EH (0000448-36): "Excluir aviso prévio da multa" é campo real da
+                # prévia (`multa.excluir_aviso_da_multa`) e o bot nunca o tocava — o
+                # PJC saía com o default true mesmo com a prévia em false (a multa de
+                # 40% deixava de incidir sobre o FGTS do aviso). O checkbox re-renderiza
+                # após o onchange de incidenciaDoFgts (fgts.xhtml:94/115).
+                self._aguardar_ajax(3000)
+                _safe(lambda: self._marcar_checkbox("excluirAvisoDaMulta",
+                                                    bool(getattr(f.multa, "excluir_aviso_da_multa", False))),
+                      "excluirAvisoDaMulta")
             _safe(lambda: self._marcar_checkbox("multaDoArtigo467", f.multa_artigo_467), "multaDoArtigo467")
             _safe(lambda: self._marcar_checkbox("multa10", f.multa_10_lc110), "multa10")
 
