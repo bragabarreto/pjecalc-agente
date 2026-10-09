@@ -475,6 +475,14 @@ de dias do mês no período e o pago da competência pelo histórico (base +
 evolução). Save verificado, `_ocorrencias_editadas=True`, Regerar Manter.
 IMPORTADA_DO_CARTAO zerada → 🛑. `test_inv175`.
 
+Achados da auditoria do PJC (5ª execução) corrigidos no mesmo #80-EH: a data da
+linha da grade vive no INPUT `dataInicial` (o textContent do `<tr>` não a traz —
+sem ela a fração do mês era 1,0 e o pago nunca casava); o multiplicador era
+gravado com 2 casas (`1,33` em vez de 1,3333 nas FÉRIAS + 1/3 — `_fmt_br_prec`,
+até 8 casas); e o checkbox FGTS "Excluir aviso da multa" nunca era tocado (PJC
+saía `excluirAvisoDaMulta=true` com a prévia em false — agora aplicado e
+verificado na releitura #80-DO).
+
 > ⚠️ **Cartão de ponto só com DOMINGOS (1/mês) é imprevisível**: a apuração
 > reconheceu "Repousos Trabalhados" em 1 dos 34 domingos lançados por
 > override (10/2023) e contou os demais ora como hora normal, ora nada. Quando
