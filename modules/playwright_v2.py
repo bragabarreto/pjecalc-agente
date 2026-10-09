@@ -3766,6 +3766,7 @@ class PlaywrightAutomatorV2:
             self._clicar("salvar")
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1200)
+            self._filtros_escopo_salvaram = True
         except Exception as e:
             self.log(f"    ⚠ #80-CX salvar: {str(e)[:110]}")
         rel = {r["idx"]: r for r in self._ler_ocorrencias_da_grade()}
@@ -3996,6 +3997,7 @@ class PlaywrightAutomatorV2:
                 self._zerar_ocorrencia(r["idx"])
             try:
                 self._clicar("salvar")
+                self._filtros_escopo_salvaram = True
                 self._aguardar_ajax(8000)
                 self._page.wait_for_timeout(1200)
             except Exception as e:
@@ -14851,6 +14853,20 @@ class PlaywrightAutomatorV2:
         except Exception as _e:
             self.log(f"  ⚠ escopo deferido pré-Liquidar: {str(_e)[:150]}")
         self._sonda_escopo("B2-pos-filtro-pre-liquidar")
+        # #80-EG (0000448-36, 3ª execução, 09/10/2026): os saves das grades de
+        # escopo (13º janela + férias #80-CX, um atrás do outro) deixam o
+        # servidor regerando; a âncora Verbas logo em seguida pegou
+        # LockTimeout (template-conteudo.xhtml rendered=emModoListagem) e matou
+        # a conversa — o Liquidar abriu SEM registro e o POST deu 500
+        # (liquidacao.xhtml #{registro.data}: 'registro' resolved to null).
+        # Fechar+Reabrir dá conversa NOVA com o cálculo commitado (mesmo
+        # remédio do "Fechar (pré-Liquidar)" que roda ANTES dos filtros).
+        if getattr(self, "_filtros_escopo_salvaram", False):
+            try:
+                self._aguardar_servidor_ocioso(contexto="pós-filtros de escopo (#80-EG)")
+                self._fechar_e_reabrir_calculo("pós-filtros de escopo (#80-EG)")
+            except Exception as _e:
+                self.log(f"  ⚠ Fechar+Reabrir pós-filtros de escopo: {str(_e)[:120]}")
 
         # ── 14a. Navegar para Liquidar via sidebar JSF ─────────────────────
         # Sempre passar pelo Dados do Cálculo primeiro para garantir que
