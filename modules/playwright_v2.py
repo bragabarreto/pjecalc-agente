@@ -2694,17 +2694,19 @@ class PlaywrightAutomatorV2:
         from datetime import datetime as _dt, timedelta as _td
         import calendar as _cal
         p = v.parametros
-        if getattr(p, "valor", None) != TipoValor.CALCULADO:
+        def _enum_nome(x):
+            x = getattr(x, "value", x)
+            return str(x or "").split(".")[-1]
+        if _enum_nome(getattr(p, "valor", None)) != "CALCULADO":
             return True
-        if str(getattr(p, "ocorrencia_pagamento", "") or "") != "MENSAL":
+        if _enum_nome(getattr(p, "ocorrencia_pagamento", None)) != "MENSAL":
             return True
         fc = getattr(p, "formula_calculado", None)
         q = getattr(fc, "quantidade", None) if fc else None
-        q_tipo = str(getattr(q, "tipo", "") or "")
-        q_tipo = q_tipo.split(".")[-1]
+        q_tipo = _enum_nome(getattr(q, "tipo", None)) if q is not None else ""
         q_val = float(getattr(q, "valor", 0) or 0) if q is not None else 0.0
         vp = getattr(p, "valor_pago", None)
-        vp_tipo = str(getattr(vp, "tipo", "") or "").split(".")[-1]
+        vp_tipo = _enum_nome(getattr(vp, "tipo", None)) if vp is not None else ""
         vp_hist = getattr(vp, "base_historico_nome", None) if vp is not None else None
         quer_qtd = q_tipo in ("INFORMADA", "IMPORTADA_DO_CARTAO") and (q_tipo == "IMPORTADA_DO_CARTAO" or q_val > 0)
         quer_pago = vp_tipo == "CALCULADO" and bool(vp_hist)
