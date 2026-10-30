@@ -25,6 +25,7 @@
         <th>Status</th>
         <th>Admissão</th>
         <th>Demissão</th>
+        <th>Origem (IP)</th>
         <th>Arquivo .PJC</th>
         <th>Ações</th>
       </tr>
@@ -49,6 +50,7 @@
         </td>
         <td>{{ calc.admissao or '—' }}</td>
         <td>{{ calc.demissao or '—' }}</td>
+        <td>{{ calc.origem_ip or '—' }}</td>
         <td>
           {% if calc.arquivo_pjc %}
           <a href="/download/{{ calc.sessao_id }}/pjc" class="btn btn-success" style="padding:4px 10px; font-size:0.8rem;">Download .pjc</a>

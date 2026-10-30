@@ -126,6 +126,7 @@ class Calculo(Base):
     criado_em = Column(DateTime, default=datetime.utcnow)
     atualizado_em = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     confirmado_em = Column(DateTime)
+    origem_ip = Column(String(64))  # IP de quem criou o cálculo (modules/acesso.py)
     exportado_em = Column(DateTime)
 
     processo = relationship("Processo", back_populates="calculos")
@@ -510,6 +511,15 @@ class EstrategiaParametrizacaoVerba(Base):
 def criar_tabelas() -> None:
     """Cria todas as tabelas no banco de dados (idempotente — safe em produção)."""
     Base.metadata.create_all(bind=engine)
+    # create_all não acrescenta colunas a tabela existente.
+    try:
+        from sqlalchemy import inspect, text
+        if "origem_ip" not in {c["name"] for c in inspect(engine).get_columns("calculos")}:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE calculos ADD COLUMN origem_ip VARCHAR(64)"))
+    except Exception as e:  # best-effort: nunca derruba o startup
+        import logging
+        logging.getLogger(__name__).warning("migração origem_ip falhou: %s", e)
 
 
 # ── Repositório original (inalterado) ─────────────────────────────────────────
@@ -553,7 +563,9 @@ class RepositorioCalculo:
 
         calculo = self.db.query(Calculo).filter_by(sessao_id=sessao_id).first()
         if not calculo:
-            calculo = Calculo(sessao_id=sessao_id, processo_id=processo.id)
+            from modules.acesso import ip_atual
+            calculo = Calculo(sessao_id=sessao_id, processo_id=processo.id,
+                              origem_ip=ip_atual())
             self.db.add(calculo)
 
         cont = dados.get("contrato", {})

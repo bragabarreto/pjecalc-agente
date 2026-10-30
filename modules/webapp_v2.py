@@ -122,6 +122,7 @@ def registrar_calculo_db(sessao_id: str, data: dict, status: str = "previa_gerad
         reclamante = _nome(proc.get("reclamante"))
         reclamado = _nome(proc.get("reclamado"))
 
+        from modules.acesso import ip_atual
         db = SessionLocal()
         try:
             proc_db = db.query(Processo).filter(Processo.numero_processo == numero).first()
@@ -138,6 +139,7 @@ def registrar_calculo_db(sessao_id: str, data: dict, status: str = "previa_gerad
                     status=status,
                     dados_json=json.dumps(data),
                     confirmado_em=datetime.utcnow() if confirmar else None,
+                    origem_ip=ip_atual(),
                 )
                 db.add(calc)
             else:

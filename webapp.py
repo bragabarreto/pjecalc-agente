@@ -298,6 +298,14 @@ try:
 except Exception as _e:
     logging.getLogger(__name__).warning(f"Falha ao registrar router_extracao: {_e}")
 
+# ── Acesso: senha opt-in (APP_PASSWORD) + IP de origem dos cálculos ─────────
+from modules.acesso import AcessoMiddleware, router_acesso
+app.include_router(router_acesso)
+app.add_middleware(AcessoMiddleware)
+if not os.environ.get("APP_PASSWORD"):
+    logging.getLogger(__name__).warning(
+        "APP_PASSWORD não definida — app ABERTO, sem autenticação")
+
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
