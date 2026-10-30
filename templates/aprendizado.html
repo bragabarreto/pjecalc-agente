@@ -128,7 +128,7 @@
     {% for s in sessoes %}
       <tr class="session-row">
         <td>#{{ s.id }}</td>
-        <td><small>{{ s.iniciada_em.strftime('%d/%m/%Y %H:%M') if s.iniciada_em else '—' }}</small></td>
+        <td><small>{{ s.iniciada_em|brt('%d/%m/%Y %H:%M') }}</small></td>
         <td>
           {% if s.status == 'concluida' %}
             <span class="badge badge-verde">Concluída</span>

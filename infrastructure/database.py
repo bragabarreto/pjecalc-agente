@@ -128,6 +128,9 @@ class Calculo(Base):
     confirmado_em = Column(DateTime)
     origem_ip = Column(String(64))  # IP de quem criou o cálculo (modules/acesso.py)
     exportado_em = Column(DateTime)
+    # Horários em UTC (naive); a exibição converte para Brasília (filtro `brt`).
+    iniciado_em = Column(DateTime)    # 1ª solicitação do usuário (início do cálculo)
+    finalizado_em = Column(DateTime)  # fim da automação (PJC gerado ou término, ainda com erro)
 
     processo = relationship("Processo", back_populates="calculos")
     verbas = relationship("Verba", back_populates="calculo", cascade="all, delete-orphan")
@@ -514,12 +517,16 @@ def criar_tabelas() -> None:
     # create_all não acrescenta colunas a tabela existente.
     try:
         from sqlalchemy import inspect, text
-        if "origem_ip" not in {c["name"] for c in inspect(engine).get_columns("calculos")}:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE calculos ADD COLUMN origem_ip VARCHAR(64)"))
+        existentes = {c["name"] for c in inspect(engine).get_columns("calculos")}
+        novas = (("origem_ip", "VARCHAR(64)"), ("iniciado_em", "TIMESTAMP"),
+                 ("finalizado_em", "TIMESTAMP"))
+        for nome, tipo in novas:
+            if nome not in existentes:
+                with engine.begin() as conn:
+                    conn.execute(text(f"ALTER TABLE calculos ADD COLUMN {nome} {tipo}"))
     except Exception as e:  # best-effort: nunca derruba o startup
         import logging
-        logging.getLogger(__name__).warning("migração origem_ip falhou: %s", e)
+        logging.getLogger(__name__).warning("migração de colunas de calculos falhou: %s", e)
 
 
 # ── Repositório original (inalterado) ─────────────────────────────────────────
@@ -565,7 +572,7 @@ class RepositorioCalculo:
         if not calculo:
             from modules.acesso import ip_atual
             calculo = Calculo(sessao_id=sessao_id, processo_id=processo.id,
-                              origem_ip=ip_atual())
+                              origem_ip=ip_atual(), iniciado_em=datetime.utcnow())
             self.db.add(calculo)
 
         cont = dados.get("contrato", {})
@@ -640,7 +647,14 @@ class RepositorioCalculo:
         calculo = self._obter_calculo(sessao_id)
         calculo.arquivo_pjc = caminho_pjc
         calculo.status = "pjc_exportado"
-        calculo.exportado_em = datetime.utcnow()
+        # Horário de geração do PJC = mtime do arquivo (vínculo tardio não
+        # deve virar "agora"); sem arquivo legível, o instante do vínculo.
+        try:
+            gerado = datetime.utcfromtimestamp(os.path.getmtime(caminho_pjc))
+        except Exception:
+            gerado = datetime.utcnow()
+        calculo.exportado_em = gerado
+        calculo.finalizado_em = gerado  # PJC gerado depois sobrepõe o fim por erro
         calculo.atualizado_em = datetime.utcnow()
         self.db.commit()
 

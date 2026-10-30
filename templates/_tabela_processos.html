@@ -38,7 +38,7 @@
           {% endif %}
         {% else %}—{% endif %}
       </td>
-      <td>{{ proc.atualizado_em.strftime('%d/%m/%Y %H:%M') if proc.atualizado_em else '—' }}</td>
+      <td>{{ proc.atualizado_em|brt('%d/%m/%Y %H:%M') }}</td>
       <td>
         {% if ultimo_calc and ultimo_calc.arquivo_pjc %}
         <a href="/download/{{ ultimo_calc.sessao_id }}/pjc" class="btn btn-success" style="padding:4px 10px; font-size:0.8rem;">Download .PJC</a>

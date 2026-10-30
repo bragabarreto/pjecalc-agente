@@ -140,10 +140,13 @@ def registrar_calculo_db(sessao_id: str, data: dict, status: str = "previa_gerad
                     dados_json=json.dumps(data),
                     confirmado_em=datetime.utcnow() if confirmar else None,
                     origem_ip=ip_atual(),
+                    iniciado_em=_inicio_da_sessao(sessao_id),
                 )
                 db.add(calc)
             else:
                 calc.dados_json = json.dumps(data)
+                if not calc.iniciado_em:
+                    calc.iniciado_em = _inicio_da_sessao(sessao_id) or calc.criado_em
                 if confirmar:
                     calc.status = status
                     if not calc.confirmado_em:
@@ -156,6 +159,20 @@ def registrar_calculo_db(sessao_id: str, data: dict, status: str = "previa_gerad
     except Exception as _e:
         logger.warning("registrar_calculo_db(%s, status=%s): %s", sessao_id, status, _e)
         return False
+
+
+def _inicio_da_sessao(sessao_id: str):
+    """1ª solicitação do usuário (UTC naive): na extração IA, o instante do envio
+    da sentença (estado.criado_ts); nos demais caminhos, agora (criação do registro)."""
+    from datetime import datetime
+    try:
+        from modules.webapp_extracao import _load_estado
+        ts = (_load_estado(sessao_id) or {}).get("criado_ts")
+        if ts:
+            return datetime.utcfromtimestamp(float(ts))
+    except Exception:
+        pass
+    return datetime.utcnow()
 
 
 def listar_previas_pendentes(sessao_ids_confirmados: set | None = None,
@@ -199,7 +216,7 @@ def listar_previas_pendentes(sessao_ids_confirmados: set | None = None,
             return str(v or "—")
         from datetime import datetime as _dt
         try:
-            mtime = _dt.fromtimestamp(p.stat().st_mtime)
+            mtime = _dt.utcfromtimestamp(p.stat().st_mtime)
         except Exception:
             mtime = None
         pend.append({
@@ -207,7 +224,7 @@ def listar_previas_pendentes(sessao_ids_confirmados: set | None = None,
             "numero_processo": numero,
             "reclamante": _nome(proc.get("reclamante")),
             "reclamado": _nome(proc.get("reclamado")),
-            "atualizado_em": mtime,
+            "atualizado_em": mtime,  # naive UTC
             "url_previa": f"/previa/v2/{sid}",
         })
         if len(pend) >= limit:

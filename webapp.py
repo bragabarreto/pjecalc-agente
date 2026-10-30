@@ -191,9 +191,15 @@ class _AutomacaoRunner:
                     # AUTORITATIVO do run — o vínculo não pode depender do
                     # navegador do usuário. marcar_exportado é idempotente.
                     RepositorioCalculo(_db).marcar_exportado(sid, _pjc_path)
-                elif _calc.status == "em_automacao":
-                    _has_error = any("ERRO" in m.upper() for m in self.logs[-5:])
-                    _calc.status = "erro_automacao" if _has_error else "concluido"
+                else:
+                    # Fim da automação sem PJC (ainda com erro): registra o horário
+                    # de término; PJC gerado depois sobrepõe (marcar_exportado).
+                    from datetime import datetime as _dtf
+                    if not _calc.arquivo_pjc:  # PJC anterior segue sendo o fim
+                        _calc.finalizado_em = _dtf.utcnow()
+                    if _calc.status == "em_automacao":
+                        _has_error = any("ERRO" in m.upper() for m in self.logs[-5:])
+                        _calc.status = "erro_automacao" if _has_error else "concluido"
                     _db.commit()
         except Exception as _exc:
             logger.warning(f"_cleanup DB update falhou [{sid}]: {_exc}")
@@ -308,6 +314,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+from modules.horario import brt as _brt
+templates.env.filters["brt"] = _brt
 
 # Servir arquivos estáticos se existirem
 if STATIC_DIR.exists():

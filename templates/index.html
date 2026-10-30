@@ -99,7 +99,7 @@ async function responderConflito(id) {
         <td>{{ pv.numero_processo }}</td>
         <td>{{ pv.reclamante }}</td>
         <td>{{ pv.reclamado }}</td>
-        <td>{{ pv.atualizado_em.strftime('%d/%m/%Y %H:%M') if pv.atualizado_em else '—' }}</td>
+        <td>{{ pv.atualizado_em|brt('%d/%m/%Y %H:%M') }}</td>
         <td>
           {% if pv.n_previas > 1 %}
           <span class="badge badge-amarelo">{{ pv.n_previas }}</span>

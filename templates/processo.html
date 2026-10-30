@@ -21,7 +21,8 @@
     <thead>
       <tr>
         <th>#</th>
-        <th>Data</th>
+        <th>Início (Brasília)</th>
+        <th>Término (Brasília)</th>
         <th>Status</th>
         <th>Admissão</th>
         <th>Demissão</th>
@@ -34,7 +35,8 @@
       {% for calc in calculos %}
       <tr>
         <td>{{ loop.index }}</td>
-        <td>{{ calc.criado_em.strftime('%d/%m/%Y %H:%M') if calc.criado_em else '—' }}</td>
+        <td>{{ (calc.iniciado_em or calc.criado_em)|brt }}</td>
+        <td>{{ (calc.finalizado_em or calc.exportado_em)|brt }}</td>
         <td>
           {% if calc.status == 'pjc_exportado' %}
           <span class="badge badge-verde">PJC Exportado</span>

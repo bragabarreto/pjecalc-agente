@@ -108,3 +108,11 @@ def test_sem_app_password_gera_provisoria_aleatoria_no_log(monkeypatch, tmp_path
     assert cred["provisoria"] and "aleatória" in caplog.text
     gerada = caplog.text.split("aleatória: ")[1].split(" ")[0]
     assert acesso._confere(gerada, cred)
+
+
+def test_horario_brasilia_e_marcar_exportado(tmp_path):
+    from datetime import datetime
+    from modules.horario import brt
+    assert brt(datetime(2026, 10, 30, 17, 1, 27)) == "30/10/2026 14:01:27"   # UTC -> BRT
+    assert brt(datetime(2026, 10, 30, 1, 0), "%d/%m %H:%M") == "29/10 22:00"  # vira o dia
+    assert brt(None) == "—"

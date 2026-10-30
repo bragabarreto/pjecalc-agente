@@ -31,7 +31,7 @@
         <td><code>{{ pv.sessao_id[:8] }}</code></td>
         <td>{{ pv.reclamante }}</td>
         <td>{{ pv.reclamado }}</td>
-        <td>{{ pv.atualizado_em.strftime('%d/%m/%Y %H:%M') if pv.atualizado_em else '—' }}</td>
+        <td>{{ pv.atualizado_em|brt('%d/%m/%Y %H:%M') }}</td>
         <td>
           <a href="{{ pv.url_previa }}" class="btn btn-primary" style="padding:5px 12px; font-size:0.85rem;">Revisar / Confirmar</a>
         </td>

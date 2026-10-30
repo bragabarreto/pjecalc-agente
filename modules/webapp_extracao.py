@@ -895,6 +895,7 @@ async def processar_ia(request: Request):
     estado = {
         "fase": "etapa1_processando",
         "criado_em": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "criado_ts": time.time(),  # epoch: base do "início do cálculo" (iniciado_em)
         "texto_colado": texto_colado,
         "arquivos": arquivos,
         "conversa": [],
