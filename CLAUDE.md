@@ -260,6 +260,19 @@ playwright_pjecalc.py (Automação)
 > flag da IA, saldos/recolhimentos/deduzir, ou texto), defaults do schema e do
 > template em False. Protegido por `test_inv176`.
 
+> **Complemento (10/11/2026, 0001403-67):** o histórico **"ÚLTIMA REMUNERAÇÃO"**
+> (default do PJE-Calc, nasce com INSS marcado) NUNCA recebe CS nem FGTS. O
+> normalizer força `false/false`; o bot (`_desmarcar_incidencias_default_historico`,
+> pós-Recentes) o desmarca no PJE-Calc mesmo quando a prévia não o lista —
+> senão a liquidação bloqueia ("não possui valor cadastrado para todas as
+> ocorrências da Contribuição Social"). Salário "por fora" com FGTS decidido
+> conta como sinal de FGTS do contrato. Protegido por `test_inv176b`.
+>
+> ⚠️ **Deploy silencioso**: o workflow reportava sucesso com o `docker compose
+> build` FALHO e o container seguia na imagem antiga (10 dias). Playwright `>=`
+> baixou 1.65.0 (exige libatomic) → pinado em 1.64.1; o deploy agora usa
+> `set -e`. Depois de todo deploy, conferir `docker inspect` (StartedAt).
+
 ---
 
 ## Regra obrigatória — Condenação SÓ de FGTS: `verbas_principais` VAZIA é válida (#80-DV)
