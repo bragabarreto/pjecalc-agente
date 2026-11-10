@@ -1594,8 +1594,8 @@ function htmlHistorico(h, idx) {
       </div>
     </div>
     <div class="grid-2">
-      <div class="checkbox-row"><input type="checkbox"${h.incidencias?.fgts!==false?' checked':''} onchange="previaData.historico_salarial[${idx}].incidencias=previaData.historico_salarial[${idx}].incidencias||{};previaData.historico_salarial[${idx}].incidencias.fgts=this.checked"> <label>FGTS</label></div>
-      <div class="checkbox-row"><input type="checkbox"${h.incidencias?.cs_inss!==false?' checked':''} onchange="previaData.historico_salarial[${idx}].incidencias=previaData.historico_salarial[${idx}].incidencias||{};previaData.historico_salarial[${idx}].incidencias.cs_inss=this.checked"> <label>CS/INSS</label></div>
+      <div class="checkbox-row"><input type="checkbox"${h.incidencias?.fgts===true?' checked':''} onchange="previaData.historico_salarial[${idx}].incidencias=previaData.historico_salarial[${idx}].incidencias||{};previaData.historico_salarial[${idx}].incidencias.fgts=this.checked"> <label>FGTS</label></div>
+      <div class="checkbox-row"><input type="checkbox"${h.incidencias?.cs_inss===true?' checked':''} onchange="previaData.historico_salarial[${idx}].incidencias=previaData.historico_salarial[${idx}].incidencias||{};previaData.historico_salarial[${idx}].incidencias.cs_inss=this.checked"> <label>CS/INSS</label></div>
     </div>
     ${h.tipo_valor !== 'CALCULADO' ? `
     <div class="fieldgroup" style="margin-top:8px; background:#fafbff; border-left:3px solid #5a8dee;">
@@ -1626,7 +1626,7 @@ function adicionarHistorico() {
   previaData.historico_salarial.push({
     nome: 'NOVO HISTÓRICO',
     parcela: 'FIXA',
-    incidencias: {fgts: true, cs_inss: true},
+    incidencias: {fgts: false, cs_inss: false},
     competencia_inicial: '',
     competencia_final: '',
     tipo_valor: 'INFORMADO',

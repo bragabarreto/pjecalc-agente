@@ -245,6 +245,23 @@ playwright_pjecalc.py (Automação)
 > com valores evoluindo (PISO 1.727,26 em 2024, 1.827,96 em 01/2025). Protegido
 > por `test_inv15` (reescrito) + `test_inv47`.
 
+## Regra obrigatória — Incidências do histórico salarial na prévia (#80-EI) — NÃO REVERTER
+
+> **Regra do usuário (10/11/2026):** CS/INSS do histórico quase nunca — a JT só
+> executa contribuição sobre as parcelas da CONDENAÇÃO. FGTS do histórico só
+> quando a sentença manda apurar o FGTS do contrato (com ou sem dedução de
+> recolhidos), apenas nos históricos do salário EFETIVAMENTE praticado e sem
+> dupla incidência (piso/paradigma ficam fora; componentes homônimos
+> sobrepostos contam uma vez). Tudo na GERAÇÃO da prévia — o bot só aplica.
+>
+> **Camadas:** prompt (`INCIDÊNCIAS DO HISTÓRICO SALARIAL`, + sinal
+> `fgts.incide_sobre_historico_contrato`), normalizer `_norm_historico_incidencias`
+> (cs_inss=False salvo ordem expressa em `sentenca_texto`; fgts só com sinal:
+> flag da IA, saldos/recolhimentos/deduzir, ou texto), defaults do schema e do
+> template em False. Protegido por `test_inv176`.
+
+---
+
 ## Regra obrigatória — Condenação SÓ de FGTS: `verbas_principais` VAZIA é válida (#80-DV)
 
 > **A prévia NÃO pode exigir "ao menos 1 verba principal".** A condenação pode

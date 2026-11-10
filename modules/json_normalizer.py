@@ -3067,6 +3067,135 @@ def _norm_turnos_meia_noite(data: dict[str, Any]) -> None:
         )
 
 
+# #80-EI (10/11/2026) — Incidências do HISTÓRICO SALARIAL na geração da prévia.
+# Regra do usuário: (a) CS/INSS do histórico quase NUNCA — a Justiça do Trabalho
+# só executa contribuição sobre as parcelas da CONDENAÇÃO (não sobre os salários
+# de todo o contrato), então o histórico sai com cs_inss=False salvo determinação
+# EXPRESSA na sentença; (b) FGTS do histórico só quando a sentença manda apurar o
+# FGTS do contrato (eventualmente deduzindo recolhidos) — e então apenas nos
+# históricos que representam o salário EFETIVAMENTE praticado, sem dupla incidência
+# (referências de piso/paradigma ficam de fora; componentes homônimos sobrepostos
+# contam uma vez). A automação só aplica o que a prévia mostrar.
+_HIST_REFERENCIA_RE = None
+_HIST_SALARIO_PRINCIPAL_RE = None
+_FGTS_CONTRATO_RE = None
+_CS_SALARIOS_EXPRESSA_RE = None
+_CS_NEGACAO_RE = None
+
+
+def _janelas_em_torno(texto: str, padrao, raio: int = 160):
+    for m in padrao.finditer(texto):
+        yield texto[max(0, m.start() - raio): m.end() + raio]
+
+
+def _sentenca_manda_fgts_do_contrato(texto: Any) -> bool:
+    global _FGTS_CONTRATO_RE
+    import re as _re
+    t = _sa_upper(texto)
+    if not t:
+        return False
+    if _FGTS_CONTRATO_RE is None:
+        _FGTS_CONTRATO_RE = _re.compile(
+            r"NAO\s+(?:RECOLHID|DEPOSITAD)|NAO\s+FORAM\s+(?:RECOLHID|DEPOSITAD)"
+            r"|DEPOSITOS?\s+(?:DO\s+FGTS\s+)?(?:NAO|DEVIDOS|FUNDIARIOS)"
+            r"|RECOLHIMENTOS?\s+(?:DO\s+)?FGTS|DIFERENCAS?\s+DE\s+FGTS"
+            r"|TODO\s+O\s+(?:PERIODO|CONTRATO)|DURANTE\s+(?:TODO\s+)?O\s+CONTRATO"
+            r"|DEDUC\w+|ABATIDOS?|CONTA\s+VINCULADA"
+        )
+    for j in _janelas_em_torno(t, _re.compile(r"\bFGTS\b")):
+        if _FGTS_CONTRATO_RE.search(j):
+            return True
+    return False
+
+
+def _sentenca_manda_cs_sobre_salarios(texto: Any) -> bool:
+    global _CS_SALARIOS_EXPRESSA_RE, _CS_NEGACAO_RE
+    import re as _re
+    t = _sa_upper(texto)
+    if not t:
+        return False
+    if _CS_SALARIOS_EXPRESSA_RE is None:
+        _CS_SALARIOS_EXPRESSA_RE = _re.compile(
+            r"(?:CONTRIBUICO\w*|INSS|PREVIDENCI\w*)[^.]{0,120}"
+            r"(?:SALARIOS?\s+(?:PAGOS?|CONTRATUAIS)|TODO\s+O\s+PERIODO|PERIODO\s+CONTRATUAL"
+            r"|DURANTE\s+(?:TODO\s+)?O\s+CONTRATO)"
+        )
+        _CS_NEGACAO_RE = _re.compile(
+            r"\bNAO\b|\bSEM\b|INCOMPETEN|AFAST|INDEVID|\bEXCLU"
+        )
+    for m in _CS_SALARIOS_EXPRESSA_RE.finditer(t):
+        janela = t[max(0, m.start() - 80): m.end() + 40]
+        if _CS_NEGACAO_RE.search(janela):
+            continue
+        return True
+    return False
+
+
+def _comp_int_ei(comp: Any) -> int | None:
+    try:
+        m, a = str(comp or "").split("/")
+        return int(a) * 12 + int(m)
+    except Exception:
+        return None
+
+
+def _norm_historico_incidencias(
+    data: dict[str, Any], sentenca_texto: str | None = None
+) -> None:
+    """Calibra `incidencias.{fgts,cs_inss}` dos históricos salariais (#80-EI)."""
+    global _HIST_REFERENCIA_RE, _HIST_SALARIO_PRINCIPAL_RE
+    import re as _re
+    hists = data.get("historico_salarial")
+    if not isinstance(hists, list) or not hists:
+        return
+    if _HIST_REFERENCIA_RE is None:
+        _HIST_REFERENCIA_RE = _re.compile(
+            r"PISO|PARADIGM|CATEGORIA|NORMATIV|\bCCT\b|\bACT\b|EQUIPARA|REFERENCIA"
+        )
+        _HIST_SALARIO_PRINCIPAL_RE = _re.compile(
+            r"^(?:ULTIMA\s+REMUNERACAO|SALARIO(?:\s+(?:BASE|REGISTRADO|CONTRATUAL|MENSAL))?"
+            r"|REMUNERACAO(?:\s+MENSAL)?)$"
+        )
+    fgts = data.get("fgts") if isinstance(data.get("fgts"), dict) else {}
+    texto_ok = bool(sentenca_texto and str(sentenca_texto).strip())
+    fgts_contrato = bool(
+        fgts.get("incide_sobre_historico_contrato")
+        or fgts.get("saldos_a_deduzir")
+        or fgts.get("deduzir_do_fgts")
+        or fgts.get("recolhimentos_existentes")
+        or (texto_ok and _sentenca_manda_fgts_do_contrato(sentenca_texto))
+    )
+    cs_expressa = texto_ok and _sentenca_manda_cs_sobre_salarios(sentenca_texto)
+
+    mantidos: dict[str, list[tuple[int, int]]] = {}
+    for h in sorted(
+        (x for x in hists if isinstance(x, dict)),
+        key=lambda x: _comp_int_ei(x.get("competencia_inicial")) or 0,
+    ):
+        inc = h.get("incidencias")
+        if not isinstance(inc, dict):
+            inc = {}
+            h["incidencias"] = inc
+        nome = _sa_upper(h.get("nome"))
+        if not cs_expressa:
+            inc["cs_inss"] = False
+        if not fgts_contrato or _HIST_REFERENCIA_RE.search(nome):
+            inc["fgts"] = False
+            continue
+        if inc.get("fgts") is False:
+            continue
+        ini = _comp_int_ei(h.get("competencia_inicial")) or 0
+        fim = _comp_int_ei(h.get("competencia_final")) or 999999
+        chave = "SALARIO_PRINCIPAL" if _HIST_SALARIO_PRINCIPAL_RE.match(nome) else nome
+        faixas = mantidos.setdefault(chave, [])
+        if any(ini <= f and i <= fim for i, f in faixas):
+            inc["fgts"] = False  # dupla incidência: mesmo componente já marcado
+        else:
+            inc["fgts"] = True
+            faixas.append((ini, fim))
+
+
+
 def normalize_v2_json(
     payload: dict[str, Any], *, sentenca_texto: str | None = None
 ) -> dict[str, Any]:
@@ -3800,6 +3929,10 @@ def normalize_v2_json(
             )
             if _positivos:
                 _h["valor_brl"] = float(_positivos[0]["valor_brl"])
+
+    # #80-EI — incidências do histórico (CS só com ordem expressa; FGTS conforme
+    # a sentença, sem dupla incidência).
+    _norm_historico_incidencias(data, sentenca_texto=sentenca_texto)
 
     # 6.bis Férias — normalizar valor "VENCIDAS" (não existe no enum) para
     # "INDENIZADAS" preservando o flag `dobra`. No PJE-Calc, "vencidas" significa

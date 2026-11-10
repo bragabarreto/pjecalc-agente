@@ -6048,3 +6048,40 @@ def test_inv175_grade_stale_de_calculado_recebe_quantidade_e_pago_da_previa():
     pos = pw.split("def fase_pos_recentes_correcoes")[1].split("\n    def ")[0]
     assert "self._garantir_ocorrencias_principal_calculado(v)" in pos
 
+
+
+def _hist_ei(nome, ini="01/2023", fim="12/2024"):
+    return {"nome": nome, "incidencias": {"fgts": True, "cs_inss": True},
+            "competencia_inicial": ini, "competencia_final": fim}
+
+
+def test_inv176_incidencias_do_historico_cs_nunca_fgts_conforme_sentenca():
+    """#80-EI (10/11/2026): CS/INSS do histórico só com ordem expressa (a JT não
+    executa contribuição sobre os salários do contrato); FGTS do histórico só se
+    a sentença manda apurar o FGTS do contrato, sem dupla incidência."""
+    import sys
+    sys.path.insert(0, str(REPO_ROOT))
+    from modules.json_normalizer import normalize_v2_json as n
+
+    # sem sinal de FGTS do contrato: tudo falso
+    d = n({"historico_salarial": [_hist_ei("SALARIO BASE")], "fgts": {}},
+          sentenca_texto="Condeno ao FGTS + 40% sobre as verbas deferidas.")
+    assert d["historico_salarial"][0]["incidencias"] == {"fgts": False, "cs_inss": False}
+
+    # FGTS do contrato (extrato a deduzir): salário real marcado, referência e duplicata não
+    d = n({"historico_salarial": [_hist_ei("ÚLTIMA REMUNERAÇÃO"), _hist_ei("SALARIO BASE"),
+                                  _hist_ei("PISO CATEGORIA"), _hist_ei("COMISSOES")],
+           "fgts": {"saldos_a_deduzir": [{"data": "01/01/2025", "valor_brl": 1}]}})
+    inc = {h["nome"]: h["incidencias"] for h in d["historico_salarial"]}
+    assert inc["PISO CATEGORIA"]["fgts"] is False
+    assert [inc["ÚLTIMA REMUNERAÇÃO"]["fgts"], inc["SALARIO BASE"]["fgts"]].count(True) == 1
+    assert inc["COMISSOES"]["fgts"] is True
+    assert all(v["cs_inss"] is False for v in inc.values())
+
+    # CS expressa na sentença preserva cs_inss
+    d = n({"historico_salarial": [_hist_ei("SALARIO BASE")], "fgts": {}},
+          sentenca_texto="Determino o recolhimento das contribuições previdenciárias sobre os salários pagos durante todo o contrato.")
+    assert d["historico_salarial"][0]["incidencias"]["cs_inss"] is True
+
+    prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "INCIDÊNCIAS DO HISTÓRICO SALARIAL — INVARIANTE PERMANENTE" in prompt

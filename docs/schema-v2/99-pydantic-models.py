@@ -266,8 +266,9 @@ class ParametrosCalculo(BaseModel):
 
 
 class HistoricoSalarialIncidencias(BaseModel):
-    fgts: bool = True
-    cs_inss: bool = True
+    # #80-EI: incidência do histórico é EXCEÇÃO, não default (ver normalizer).
+    fgts: bool = False
+    cs_inss: bool = False
 
 
 class HistoricoSalarialCalculado(BaseModel):

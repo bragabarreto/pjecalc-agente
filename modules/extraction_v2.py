@@ -251,7 +251,7 @@ estabelecido na página parâmetro da verba."*
   {
     "nome": "ÚLTIMA REMUNERAÇÃO",
     "parcela": "FIXA|VARIAVEL",
-    "incidencias": {"fgts": true, "cs_inss": true},
+    "incidencias": {"fgts": false, "cs_inss": false},
     "competencia_inicial": "MM/YYYY",
     "competencia_final": "MM/YYYY",
     "tipo_valor": "INFORMADO|CALCULADO",
@@ -267,6 +267,27 @@ estabelecido na página parâmetro da verba."*
 - Salário "por fora" → 2 entradas: "ÚLTIMA REMUNERAÇÃO" (registrado) + "SALÁRIO PAGO POR FORA"
 - Diferença salarial por piso normativo → 2 entradas: "PISO CATEGORIA" + "SALÁRIO REGISTRADO"
 - Evolução salarial (dissídio anual) → entradas segmentadas por competências
+
+⚠️ **INCIDÊNCIAS DO HISTÓRICO SALARIAL — INVARIANTE PERMANENTE — NÃO REVERTER (#80-EI)**:
+
+- **`cs_inss`: SEMPRE `false`** no histórico. A Justiça do Trabalho NÃO cobra
+  contribuição previdenciária sobre os salários de todo o período contratual
+  (não é da sua competência); o INSS incide só sobre as parcelas da CONDENAÇÃO
+  (isso é configurado nas `incidencias` de cada verba). Só marque `true` se a
+  sentença DETERMINAR EXPRESSAMENTE contribuição sobre os salários pagos/contrato.
+- **`fgts`: `false` por padrão.** Marque `true` SOMENTE quando a sentença mandar
+  apurar o FGTS do contrato (depósitos não recolhidos, diferenças de FGTS,
+  eventualmente com dedução de valores recolhidos/extrato). Nesse caso emita
+  também `"fgts": {"incide_sobre_historico_contrato": true, ...}` e marque
+  `incidencias.fgts=true` apenas nos históricos que representam a remuneração
+  EFETIVAMENTE praticada no contrato (salário base, salário por fora, comissões
+  pagas…). A incidência sobre as parcelas da condenação continua nas verbas.
+- **Sem dupla incidência:** históricos de REFERÊNCIA (piso normativo, paradigma,
+  salário da categoria) ficam com `fgts=false`; e dois históricos que
+  representam o MESMO salário no mesmo período (ex.: "ÚLTIMA REMUNERAÇÃO" e
+  "SALÁRIO BASE") NÃO podem ter `fgts=true` ao mesmo tempo.
+- Se a sentença condena FGTS apenas sobre as verbas deferidas, TODOS os
+  históricos ficam com `fgts=false`.
 
 ⚠️ **`tipo_valor` do histórico salarial (NÃO confundir com schema de verba)**:
 
@@ -304,7 +325,7 @@ cada mudança de valor:
 {
   "nome": "SALÁRIO",
   "parcela": "FIXA",
-  "incidencias": {"fgts": true, "cs_inss": true},
+  "incidencias": {"fgts": false, "cs_inss": false},
   "competencia_inicial": "04/2021",
   "competencia_final": "10/2024",
   "tipo_valor": "INFORMADO",
