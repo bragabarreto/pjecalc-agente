@@ -29,6 +29,7 @@ jobs:
           username: ${{ secrets.ORACLE_USER }}
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
+            set -e
             cd ~/pjecalc-agente
 
             # Criar .env com secrets

@@ -3165,6 +3165,16 @@ def _norm_historico_incidencias(
         or fgts.get("recolhimentos_existentes")
         or (texto_ok and _sentenca_manda_fgts_do_contrato(sentenca_texto))
     )
+    # Salário "por fora"/extrafolha com FGTS já decidido (#69): é condenação
+    # expressa de FGTS sobre a parcela — conta como sinal do contrato.
+    if not fgts_contrato:
+        fgts_contrato = any(
+            isinstance(h, dict)
+            and _re.search(r"POR FORA|EXTRAFOLHA", _sa_upper(h.get("nome")))
+            and isinstance(h.get("incidencias"), dict)
+            and h["incidencias"].get("fgts") is True
+            for h in hists
+        )
     cs_expressa = texto_ok and _sentenca_manda_cs_sobre_salarios(sentenca_texto)
 
     mantidos: dict[str, list[tuple[int, int]]] = {}
@@ -3177,6 +3187,12 @@ def _norm_historico_incidencias(
             inc = {}
             h["incidencias"] = inc
         nome = _sa_upper(h.get("nome"))
+        if _re.match(r"^ULTIMA\s+REMUNERACAO\b", nome):
+            # Regra do usuário (10/11/2026): o histórico "ÚLTIMA REMUNERAÇÃO"
+            # (default do PJE-Calc) NUNCA recebe incidência de CS nem de FGTS.
+            inc["cs_inss"] = False
+            inc["fgts"] = False
+            continue
         if not cs_expressa:
             inc["cs_inss"] = False
         if not fgts_contrato or _HIST_REFERENCIA_RE.search(nome):

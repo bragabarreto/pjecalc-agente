@@ -2644,6 +2644,26 @@ class PlaywrightAutomatorV2:
                 except Exception as e:
                     self.log(f"  ⚠ Erro pós-Recentes editar '{hist.nome}': {e}")
 
+        # 1b) Default ÚLTIMA REMUNERAÇÃO SEM incidência (regra do usuário,
+        # 10/11/2026: nunca CS nem FGTS nesse histórico). O PJE-Calc cria o
+        # default com INSS marcado e a liquidação bloqueia ("não possui valor
+        # cadastrado para todas as ocorrências da Contribuição Social"). A
+        # prévia (normalizer) traz fgts=false/cs_inss=false quando o histórico
+        # é listado; quando não é, ele existe mesmo assim e fica desmarcado.
+        _ur = next((h for h in self.previa.historico_salarial
+                    if _norm(h.nome) == "ULTIMA REMUNERACAO"), None)
+        if _ur is None or not _ur.incidencias.cs_inss:
+            try:
+                if self._navegar_menu_via_click("li_calculo_historico_salarial"):
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(2000)
+                    self._desmarcar_incidencias_default_historico(
+                        "ÚLTIMA REMUNERAÇÃO",
+                        fgts=bool(_ur.incidencias.fgts) if _ur else False,
+                    )
+            except Exception as e:
+                self.log(f"  ⚠ Erro pós-Recentes desmarcar incidências do default: {e}")
+
         # Re-aplicar valorDevido em verbas INFORMADO pós-Recentes (defensivo:
         # se outer conv não @End'd, edits inline em fase_verbas podem ter
         # sido perdidas. Re-aplicar em conv pós-Recentes garante persistência).
@@ -3171,6 +3191,59 @@ class PlaywrightAutomatorV2:
         except Exception as _e:
             self.log(f"    ⚠ Regerar pós-ocorrências dos reflexos: {_e}")
         return salvo
+
+    def _desmarcar_incidencias_default_historico(self, nome: str, fgts: bool = False) -> None:
+        """Desmarca CS (inss) e FGTS do histórico default do PJE-Calc (#80-EI).
+
+        O default "ÚLTIMA REMUNERAÇÃO" nasce com INSS marcado; sem valor nas
+        ocorrências de CS a liquidação é bloqueada. Aplica o que a prévia diz
+        (incidências desmarcadas) — idempotente e verificado pelo save.
+        """
+        self.log(f"  → Desmarcar incidências do default '{nome}' (CS/FGTS)")
+        try:
+            clicou = self._page.evaluate(
+                """(nome) => {
+                    const strip = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase();
+                    for (const tr of document.querySelectorAll('table.rich-table tbody tr')) {
+                        if (strip(tr.textContent).includes(strip(nome))) {
+                            const link = tr.querySelector('a.linkAlterar');
+                            if (link) { link.click(); return true; }
+                        }
+                    }
+                    return false;
+                }""",
+                nome,
+            )
+            if not clicou:
+                self.log(f"    ℹ '{nome}': não está na listagem — nada a desmarcar")
+                return
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(1500)
+            self._marcar_checkbox_se_diferente("inss", False)
+            self._aguardar_ajax(2000)
+            self._marcar_checkbox_se_diferente("proporcionalizarINSS", False)
+            self._marcar_checkbox_se_diferente("fgts", bool(fgts))
+            self._aguardar_ajax(1500)
+            # Ocorrências já geradas: desmarcar incideINSS por linha
+            n = self._page.evaluate("""() => {
+                let n = 0;
+                document.querySelectorAll("input[id$=':incideINSS']").forEach(cb => {
+                    if (!cb.disabled && cb.checked) {
+                        cb.checked = false;
+                        cb.dispatchEvent(new Event('change', {bubbles: true}));
+                        n++;
+                    }
+                });
+                return n;
+            }""")
+            self.log(f"    ✓ incideINSS desmarcado em {n} ocorrência(s)")
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            ok = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+            self.log(f"    {'✓' if ok else '⚠'} '{nome}' salvo sem CS"
+                     f"{'' if ok else ' (sem confirmação de save)'}")
+        except Exception as e:
+            self.log(f"    ⚠ Erro ao desmarcar '{nome}': {e}")
 
     def _editar_default_historico_para_cs(self, nome: str, valor_brl: float | None = None,
                                             competencia_inicial: str | None = None,

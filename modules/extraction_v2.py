@@ -269,6 +269,7 @@ estabelecido na página parâmetro da verba."*
 - Evolução salarial (dissídio anual) → entradas segmentadas por competências
 
 ⚠️ **INCIDÊNCIAS DO HISTÓRICO SALARIAL — INVARIANTE PERMANENTE — NÃO REVERTER (#80-EI)**:
+- O histórico **"ÚLTIMA REMUNERAÇÃO"** NUNCA recebe incidência: `{"fgts": false, "cs_inss": false}` sempre, sem exceção.
 
 - **`cs_inss`: SEMPRE `false`** no histórico. A Justiça do Trabalho NÃO cobra
   contribuição previdenciária sobre os salários de todo o período contratual

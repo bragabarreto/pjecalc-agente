@@ -1392,11 +1392,13 @@ def test_inv38_fgts_por_fora_so_parcela_extrafolha():
     assert inc["SALÁRIO PAGO POR FORA"]["fgts"] is True
     assert inc["SALÁRIO REGISTRADO"]["fgts"] is False
     assert inc["ÚLTIMA REMUNERAÇÃO"]["fgts"] is False
-    assert all(h["incidencias"]["cs_inss"] for h in out["historico_salarial"])  # INSS preservado
+    # #80-EI (10/11/2026): CS do histórico só com ordem expressa na sentença
+    assert not any(h["incidencias"]["cs_inss"] for h in out["historico_salarial"])
     # sem histórico por fora → não generaliza
     base2 = {"parametros_calculo": base["parametros_calculo"],
              "historico_salarial": [{"nome": "SALÁRIO BASE", "incidencias": {"fgts": True, "cs_inss": True}}]}
-    assert normalize_v2_json(base2)["historico_salarial"][0]["incidencias"]["fgts"] is True
+    # #80-EI: sem sinal de FGTS do contrato na sentença, o histórico fica false
+    assert normalize_v2_json(base2)["historico_salarial"][0]["incidencias"]["fgts"] is False
     # prompt instrui a regra
     ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "incidência SÓ sobre a parcela por fora" in ext
@@ -6085,3 +6087,23 @@ def test_inv176_incidencias_do_historico_cs_nunca_fgts_conforme_sentenca():
 
     prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "INCIDÊNCIAS DO HISTÓRICO SALARIAL — INVARIANTE PERMANENTE" in prompt
+
+
+def test_inv176b_ultima_remuneracao_nunca_incide_cs_nem_fgts():
+    """#80-EI: histórico 'ÚLTIMA REMUNERAÇÃO' nunca marca CS/FGTS (mesmo com
+    sinal de FGTS do contrato e CS expressa); o bot desmarca o default."""
+    from modules.json_normalizer import normalize_v2_json
+    d = {"fgts": {"incide_sobre_historico_contrato": True},
+         "historico_salarial": [
+             {"nome": "ÚLTIMA REMUNERAÇÃO", "tipo_valor": "INFORMADO", "valor_brl": 3900,
+              "competencia_inicial": "10/2025", "competencia_final": "04/2027",
+              "incidencias": {"fgts": True, "cs_inss": True}},
+             {"nome": "SALARIO", "tipo_valor": "INFORMADO", "valor_brl": 3900,
+              "competencia_inicial": "10/2025", "competencia_final": "04/2027",
+              "incidencias": {"fgts": True, "cs_inss": True}}]}
+    out = normalize_v2_json(d, sentenca_texto="Incide contribuição previdenciária sobre os salários pagos.")
+    u = out["historico_salarial"][0]["incidencias"]
+    assert u == {"fgts": False, "cs_inss": False}
+    import pathlib
+    src = pathlib.Path("modules/playwright_v2.py").read_text()
+    assert "_desmarcar_incidencias_default_historico" in src
